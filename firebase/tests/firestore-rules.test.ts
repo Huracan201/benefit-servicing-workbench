@@ -7,14 +7,16 @@
  *   - protected collections are UNWRITABLE by ANY client (writes go through the backend)
  *   - protected collections are READABLE with a valid servicing role claim
  *   - users/{uid} self-write is DENIED (no role self-escalation)
- *   - idempotencyKeys are fully client-invisible
+ *   - idempotencyKeys + simulatedCharges are fully client-invisible
  *
  * Run against the Firestore emulator (from the firebase/ directory):
  *   npm run test:rules:ci          # wraps: firebase emulators:exec --only firestore "vitest run"
  *   npm run test:rules             # if the emulator is already running
  *
- * This is a skeleton: the paths below are representative — extend OPERATIONAL_PATHS /
- * READ_MODEL_PATHS and add per-collection query cases as new screens/filters land.
+ * NOTE: rules-unit-testing caches contexts per identity, and a context's `.firestore()`
+ * may only be initialized once — so every identity's Firestore handle is created ONCE
+ * in beforeAll and reused across tests (creating them per-test throws "Firestore has
+ * already been started and its settings can no longer be changed").
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -60,7 +62,19 @@ const READ_MODEL_PATHS = [
 
 const ALL_PROTECTED = [...OPERATIONAL_PATHS, ...READ_MODEL_PATHS];
 
+const INVISIBLE_PATHS = ["idempotencyKeys/key_1", "simulatedCharges/pay_x_att_001"];
+
+const SELF = "user_ops"; // ops identity's uid, for the users/{uid} self-read/self-write tests
+
+type Db = ReturnType<RulesTestContext["firestore"]>;
+
 let testEnv: RulesTestEnvironment;
+// One Firestore handle per identity, initialized exactly once (see NOTE above).
+let dbUnauth: Db;
+let dbNoRole: Db;
+let dbOps: Db;
+let dbMgr: Db;
+let dbAdmin: Db;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
@@ -71,6 +85,11 @@ beforeAll(async () => {
       port: Number(emuPort),
     },
   });
+  dbUnauth = testEnv.unauthenticatedContext().firestore();
+  dbNoRole = testEnv.authenticatedContext("user_norole", {}).firestore(); // signed in, no role claim
+  dbOps = testEnv.authenticatedContext(SELF, { role: "OPERATIONS_USER" }).firestore();
+  dbMgr = testEnv.authenticatedContext("user_mgr", { role: "SERVICING_MANAGER" }).firestore();
+  dbAdmin = testEnv.authenticatedContext("user_admin", { role: "ADMINISTRATOR" }).firestore();
 });
 
 afterAll(async () => {
@@ -81,15 +100,6 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
 });
 
-// --- auth contexts (the 2nd arg becomes custom claims on the token) ---
-const unauth = () => testEnv.unauthenticatedContext();
-const noRole = () => testEnv.authenticatedContext("user_norole", {}); // signed in, no role claim
-const ops = () => testEnv.authenticatedContext("user_ops", { role: "OPERATIONS_USER" });
-const manager = () => testEnv.authenticatedContext("user_mgr", { role: "SERVICING_MANAGER" });
-const admin = () => testEnv.authenticatedContext("user_admin", { role: "ADMINISTRATOR" });
-
-const db = (ctx: RulesTestContext) => ctx.firestore();
-
 /** Seed a document bypassing rules, so read-allow assertions read real data. */
 async function seed(path: string, data: Record<string, unknown>): Promise<void> {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -99,25 +109,22 @@ async function seed(path: string, data: Record<string, unknown>): Promise<void> 
 
 describe("unauthenticated users", () => {
   it("cannot read any protected collection", async () => {
-    const ctx = unauth();
     for (const path of ALL_PROTECTED) {
-      await assertFails(getDoc(doc(db(ctx), path)));
+      await assertFails(getDoc(doc(dbUnauth, path)));
     }
   });
 
   it("cannot write any protected collection", async () => {
-    const ctx = unauth();
     for (const path of ALL_PROTECTED) {
-      await assertFails(setDoc(doc(db(ctx), path), { x: 1 }));
+      await assertFails(setDoc(doc(dbUnauth, path), { x: 1 }));
     }
   });
 });
 
 describe("authenticated users WITHOUT a role claim", () => {
   it("cannot read protected collections (isServicingUser() is false)", async () => {
-    const ctx = noRole();
     for (const path of ALL_PROTECTED) {
-      await assertFails(getDoc(doc(db(ctx), path)));
+      await assertFails(getDoc(doc(dbNoRole, path)));
     }
   });
 });
@@ -125,60 +132,56 @@ describe("authenticated users WITHOUT a role claim", () => {
 describe("servicing users (valid role claim)", () => {
   it("OPERATIONS_USER can read every operational collection and read model", async () => {
     await seed("loans/loan_1", { borrowerId: "bor_1", loanStatus: "ACTIVE" });
-    const ctx = ops();
     for (const path of ALL_PROTECTED) {
       // getDoc on an allowed path resolves even when the doc doesn't exist — that proves the rule allows read.
-      await assertSucceeds(getDoc(doc(db(ctx), path)));
+      await assertSucceeds(getDoc(doc(dbOps, path)));
     }
   });
 
   it("can run a list/query read (read rules cover list)", async () => {
     await seed("loans/loan_1", { borrowerId: "bor_1", loanStatus: "ACTIVE" });
-    await assertSucceeds(getDocs(collection(db(ops()), "loans")));
+    await assertSucceeds(getDocs(collection(dbOps, "loans")));
   });
 
   it("CANNOT write any protected collection — even as ADMINISTRATOR", async () => {
-    const ctx = admin();
     for (const path of ALL_PROTECTED) {
-      await assertFails(setDoc(doc(db(ctx), path), { x: 1 }));
+      await assertFails(setDoc(doc(dbAdmin, path), { x: 1 }));
     }
   });
 });
 
 describe("idempotencyKeys & simulatedCharges — fully client-invisible", () => {
   it("cannot be read or written by any client, including admin", async () => {
-    for (const ctx of [unauth(), ops(), manager(), admin()]) {
-      for (const path of ["idempotencyKeys/key_1", "simulatedCharges/pay_x_att_001"]) {
-        await assertFails(getDoc(doc(db(ctx), path)));
-        await assertFails(setDoc(doc(db(ctx), path), { x: 1 }));
+    for (const db of [dbUnauth, dbOps, dbMgr, dbAdmin]) {
+      for (const path of INVISIBLE_PATHS) {
+        await assertFails(getDoc(doc(db, path)));
+        await assertFails(setDoc(doc(db, path), { x: 1 }));
       }
     }
   });
 });
 
 describe("users/{uid}", () => {
-  const SELF = "user_ops"; // matches the uid used by ops()
-
   it("a user can read their own doc", async () => {
     await seed(`users/${SELF}`, { role: "OPERATIONS_USER" });
-    await assertSucceeds(getDoc(doc(db(ops()), `users/${SELF}`)));
+    await assertSucceeds(getDoc(doc(dbOps, `users/${SELF}`)));
   });
 
   it("a non-admin cannot read another user's doc", async () => {
     await seed("users/user_other", { role: "OPERATIONS_USER" });
-    await assertFails(getDoc(doc(db(ops()), "users/user_other")));
+    await assertFails(getDoc(doc(dbOps, "users/user_other")));
   });
 
   it("an admin can read any user's doc", async () => {
     await seed("users/user_other", { role: "OPERATIONS_USER" });
-    await assertSucceeds(getDoc(doc(db(admin()), "users/user_other")));
+    await assertSucceeds(getDoc(doc(dbAdmin, "users/user_other")));
   });
 
   it("DENIES self-write (prevents role self-escalation)", async () => {
-    await assertFails(setDoc(doc(db(ops()), `users/${SELF}`), { role: "ADMINISTRATOR" }));
+    await assertFails(setDoc(doc(dbOps, `users/${SELF}`), { role: "ADMINISTRATOR" }));
   });
 
   it("DENIES admin client-write too (role changes go through the backend command)", async () => {
-    await assertFails(setDoc(doc(db(admin()), "users/user_other"), { role: "SERVICING_MANAGER" }));
+    await assertFails(setDoc(doc(dbAdmin, "users/user_other"), { role: "SERVICING_MANAGER" }));
   });
 });

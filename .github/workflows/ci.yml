@@ -65,6 +65,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21" # firebase-tools requires Java 21+ for the emulators
+      - name: Cache Firestore emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install deps
@@ -91,6 +96,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Cache Firestore emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install backend deps
@@ -147,6 +157,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+      - name: Cache Firestore emulator jar
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install frontend deps + Playwright browser
