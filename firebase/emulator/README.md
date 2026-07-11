@@ -6,7 +6,7 @@ Runs Firebase **Auth** + **Firestore** (with our `firestore.rules` and `firestor
 
 ## Prerequisites
 - Node.js 20 (matches CI)
-- **Java JDK 11+** (the Firestore emulator is a Java process)
+- **Java JDK 21+** (current firebase-tools refuses older JDKs; the Firestore emulator is a Java process — `brew install openjdk@21` on macOS)
 - `firebase-tools`: `npm i -g firebase-tools` (or run via `npx firebase-tools`)
 
 ## Project id

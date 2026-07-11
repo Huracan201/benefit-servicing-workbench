@@ -744,7 +744,11 @@ components:
         remainingCommitmentCents: { $ref: '#/components/schemas/Cents' }
         status: { $ref: '#/components/schemas/BenefitStatus' }
         acceptingPayments: { type: boolean }
-        suspendedReason: { type: [string, 'null'], enum: [LEAVE, MANUAL, null] }
+        suspendedReason:
+          oneOf:
+            - type: string
+              enum: [LEAVE, MANUAL]
+            - type: 'null'
         scheduleGenerated: { type: boolean }
         plannedInstallmentCount: { type: integer }
         installmentsGenerated: { type: integer }

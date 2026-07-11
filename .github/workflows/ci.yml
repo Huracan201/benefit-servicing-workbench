@@ -64,7 +64,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17" # Firestore emulator is a Java process
+          java-version: "21" # firebase-tools requires Java 21+ for the emulators
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install deps
@@ -90,7 +90,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install backend deps
@@ -146,7 +146,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
       - name: Install firebase-tools
         run: npm i -g firebase-tools
       - name: Install frontend deps + Playwright browser

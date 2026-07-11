@@ -18,7 +18,7 @@ When asked to "build," "run the app," or "run the tests," remember most of that 
 All require Node + Java (both present); `firebase-tools` and Spectral are used via global/npx, not committed as deps.
 
 ```bash
-# Firestore security-rule tests (needs Java for the emulator)
+# Firestore security-rule tests (needs Java 21+ for the emulator)
 npm i -g firebase-tools                 # once
 cd firebase && npm install              # once
 npm run test:rules:ci                   # starts Firestore emulator, runs Vitest, tears down
