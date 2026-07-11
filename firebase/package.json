@@ -1,0 +1,19 @@
+{
+  "name": "benefitservicing-firestore-rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Firestore security-rules tests (specs/12 §12.6), run against the Firestore emulator.",
+  "scripts": {
+    "test:rules": "vitest run",
+    "test:rules:watch": "vitest",
+    "test:rules:ci": "firebase emulators:exec --project=demo-benefitservicing-workbench --only firestore \"vitest run\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
+    "@types/node": "^20.14.0",
+    "firebase": "^10.12.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}

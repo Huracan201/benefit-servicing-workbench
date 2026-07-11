@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+
+# Node
+node_modules/
+.next/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Build / coverage
+dist/
+coverage/
+*.log
+
+# Claude Code session runtime state
+.claude/*.lock

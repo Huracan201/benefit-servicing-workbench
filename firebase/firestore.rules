@@ -1,0 +1,137 @@
+rules_version = '2';
+
+// BenefitServicing Workbench — Firestore security rules
+// Spec: specs/12-auth-and-security.md
+//
+// Model (see specs/02-architecture.md P7): reads are enforced HERE — Django is NOT in
+// the read path, so security rules are the only read gate. ALL writes go through the
+// Django backend service account, which bypasses these rules; therefore every client
+// write below is denied.
+//
+// Role comes from the Firebase custom claim `role`, set only by the backend admin
+// command (which also updates the users/{uid} mirror). Deny-by-default: any path not
+// matched here is denied.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function claimRole() {
+      // Missing claim → null (safe: null is not in the role list below).
+      return signedIn() ? request.auth.token.role : null;
+    }
+    function isServicingUser() {
+      return claimRole() in ['OPERATIONS_USER', 'SERVICING_MANAGER', 'ADMINISTRATOR'];
+    }
+    function isAdmin() {
+      return claimRole() == 'ADMINISTRATOR';
+    }
+
+    // ---------- authoritative operational collections ----------
+    // read: any servicing user (internal tool, no per-row tenancy in MVP — spec 12.4)
+    // write: never from the client
+
+    match /employers/{employerId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    match /borrowers/{borrowerId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+
+      // borrower-scoped servicing-event mirror (spec 04 §4.9)
+      match /events/{eventId} {
+        allow read: if isServicingUser();
+        allow write: if false;
+      }
+    }
+
+    match /loans/{loanId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+
+      match /notes/{noteId} {
+        allow read: if isServicingUser();
+        allow write: if false;
+      }
+      match /events/{eventId} {         // loan-scoped servicing-event mirror
+        allow read: if isServicingUser();
+        allow write: if false;
+      }
+    }
+
+    match /benefitAgreements/{agreementId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    match /scheduledContributions/{contributionId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+
+      match /attempts/{attemptId} {
+        allow read: if isServicingUser();
+        allow write: if false;
+      }
+    }
+
+    match /operationalExceptions/{exceptionId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    match /servicingEvents/{eventId} {   // global audit stream
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    // ---------- read models / projections ----------
+    // read: any servicing user; write: backend only
+
+    match /portfolioSummaries/{docId} {  // docId ∈ { "current", "YYYY-MM" }
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    match /employerSummaries/{employerId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+
+      match /periods/{periodId} {        // periodId = "YYYY-MM"
+        allow read: if isServicingUser();
+        allow write: if false;
+      }
+    }
+
+    match /loanWorkbenches/{loanId} {
+      allow read: if isServicingUser();
+      allow write: if false;
+    }
+
+    // ---------- internal: never exposed to any client ----------
+
+    match /idempotencyKeys/{key} {
+      allow read, write: if false;
+    }
+
+    match /simulatedCharges/{key} {   // payment-simulator ledger (specs/09 §9.5)
+      allow read, write: if false;
+    }
+
+    // ---------- users ----------
+    // A user may READ their own doc (admins read any). NOBODY writes via client,
+    // including self — self-write would allow role self-escalation. Role changes go
+    // through the backend admin command, which sets the custom claim AND this mirror.
+
+    match /users/{uid} {
+      allow read:  if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Any path not matched above is denied by default (deny-by-default).
+  }
+}

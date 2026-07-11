@@ -1,0 +1,951 @@
+openapi: 3.1.0
+info:
+  title: BenefitServicing Workbench — Command API
+  version: 1.0.0
+  description: >
+    Authoritative machine-readable contract for the BenefitServicing Workbench backend.
+    The API exposes **business commands**, not generic document mutations (see specs/02 P1,
+    specs/11). Reads are Firestore client-SDK subscriptions to read models (specs/05) and are
+    NOT part of this API, except the few server-composed GETs and the health probes.
+
+
+    Conventions (specs/11, specs/README):
+      - All money is integer US cents (int64).
+      - Every mutating command requires an `Idempotency-Key` header (specs/08).
+      - Optional `If-Match` carries the caller's expected `revision` for stale-UI protection.
+      - A *failed payment* is a completed command → HTTP 200 with `contribution.status = FAILED`,
+        NOT an HTTP error. HTTP errors mean the command did not complete.
+  license:
+    name: Proprietary (demo)
+servers:
+  - url: https://api.demo.example/api/v1
+    description: demo
+  - url: http://localhost:8000/api/v1
+    description: local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: benefit-agreements
+  - name: employment
+  - name: contributions
+  - name: exceptions
+  - name: notes
+  - name: admin
+  - name: system
+
+paths:
+  /benefit-agreements/{agreementId}:
+    get:
+      tags: [benefit-agreements]
+      summary: Get a benefit agreement (server-composed detail)
+      operationId: getBenefitAgreement
+      parameters:
+        - $ref: '#/components/parameters/AgreementId'
+      responses:
+        '200':
+          description: The benefit agreement.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BenefitAgreement' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /benefit-agreements/{agreementId}/activate:
+    post:
+      tags: [benefit-agreements]
+      summary: Activate a pending benefit agreement (async schedule generation)
+      description: >
+        Role SERVICING_MANAGER+. Transactionally moves the agreement PENDING→ACTIVATING,
+        solves installment amounts so Σ == totalCommitment (specs/07 §7.3), and enqueues the
+        schedule-generation task (specs/10 §10.1). Returns 202 on first acceptance; a replay of
+        a completed activation returns 200 with the ACTIVE agreement.
+      operationId: activateBenefitAgreement
+      parameters:
+        - $ref: '#/components/parameters/AgreementId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivateRequest' }
+      responses:
+        '202': { $ref: '#/components/responses/OperationAccepted' }
+        '200':
+          description: Idempotent replay of an already-completed activation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BenefitAgreement' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /benefit-agreements/{agreementId}/suspend:
+    post:
+      tags: [benefit-agreements]
+      summary: Suspend an active benefit agreement
+      description: Role SERVICING_MANAGER+. ACTIVE→SUSPENDED, sets acceptingPayments=false (specs/10 §10.2).
+      operationId: suspendBenefitAgreement
+      parameters:
+        - $ref: '#/components/parameters/AgreementId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BenefitAgreementResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /benefit-agreements/{agreementId}/resume:
+    post:
+      tags: [benefit-agreements]
+      summary: Resume a suspended benefit agreement
+      description: Role SERVICING_MANAGER+. SUSPENDED→ACTIVE, sets acceptingPayments=true.
+      operationId: resumeBenefitAgreement
+      parameters:
+        - $ref: '#/components/parameters/AgreementId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BenefitAgreementResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /benefit-agreements/{agreementId}/terminate:
+    post:
+      tags: [benefit-agreements]
+      summary: Terminate a benefit agreement (cancels future contributions async)
+      description: >
+        Role SERVICING_MANAGER+. ACTIVE/SUSPENDED→TERMINATED (terminal), acceptingPayments=false,
+        enqueues cancel-future-contributions (specs/10 §10.3–10.4). In-flight PROCESSING
+        contributions settle then cancel; they are never force-cancelled.
+      operationId: terminateBenefitAgreement
+      parameters:
+        - $ref: '#/components/parameters/AgreementId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BenefitAgreementResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /borrowers/{borrowerId}/employment-status:
+    post:
+      tags: [employment]
+      summary: Change a borrower's employment status (triggers benefit cascade)
+      description: >
+        Role SERVICING_MANAGER+. Transactionally updates employment + cascades the benefit
+        (LEAVE→suspend, TERMINATED→terminate+cancel-future, ACTIVE→resume) — specs/10 §10.4.
+        Requires UI confirmation before submit.
+      operationId: changeEmploymentStatus
+      parameters:
+        - $ref: '#/components/parameters/BorrowerId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmploymentStatusChangeRequest' }
+      responses:
+        '200':
+          description: Employment updated; benefit cascade applied. Future-contribution cancellation may still be running.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmploymentChangeResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /contributions/{contributionId}/process:
+    post:
+      tags: [contributions]
+      summary: Process a scheduled/retry-pending contribution
+      description: >
+        Role SERVICING_MANAGER+ (or SYSTEM via task). Two-phase: transition→adapter→finalize
+        (specs/09 §9.1). A declined payment is a COMPLETED command → 200 with contribution.status=FAILED
+        and an opened exception. 202 means the operation is still in progress (poll).
+      operationId: processContribution
+      parameters:
+        - $ref: '#/components/parameters/ContributionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Command completed. Inspect `contribution.status` for POSTED vs FAILED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProcessContributionResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /contributions/{contributionId}/retry:
+    post:
+      tags: [contributions]
+      summary: Schedule a retry of a failed contribution
+      description: >
+        Role OPERATIONS_USER+. FAILED→RETRY_PENDING (specs/09 §9.2). Requires benefit
+        acceptingPayments, active employment, active loan. Preserves prior attempts.
+      operationId: retryContribution
+      parameters:
+        - $ref: '#/components/parameters/ContributionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Contribution moved to RETRY_PENDING.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Contribution' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /exceptions:
+    post:
+      tags: [exceptions]
+      summary: Create a manual operational exception
+      description: >
+        Role OPERATIONS_USER+. Manual exceptions (e.g. EMPLOYMENT_VERIFICATION_REQUIRED) use
+        auto-generated ids; severity defaults from the specs/04 §4.10 type map.
+      operationId: createException
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateExceptionRequest' }
+      responses:
+        '201':
+          description: Exception created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationalException' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /exceptions/{exceptionId}/assign:
+    post:
+      tags: [exceptions]
+      summary: Assign an exception (to a user, or to the caller if omitted)
+      operationId: assignException
+      parameters:
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignExceptionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ExceptionResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /exceptions/{exceptionId}/mark-in-review:
+    post:
+      tags: [exceptions]
+      summary: Move an exception to IN_REVIEW
+      operationId: markExceptionInReview
+      parameters:
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200': { $ref: '#/components/responses/ExceptionResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /exceptions/{exceptionId}/resolve:
+    post:
+      tags: [exceptions]
+      summary: Resolve an exception
+      operationId: resolveException
+      parameters:
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveExceptionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ExceptionResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /exceptions/{exceptionId}/dismiss:
+    post:
+      tags: [exceptions]
+      summary: Dismiss an exception
+      operationId: dismissException
+      parameters:
+        - $ref: '#/components/parameters/ExceptionId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DismissExceptionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/ExceptionResult' }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /loans/{loanId}/notes:
+    post:
+      tags: [notes]
+      summary: Add an internal servicing note to a loan
+      description: Role OPERATIONS_USER+. Notes are append-only, attributed, non-empty (specs/10 §10.5).
+      operationId: addLoanNote
+      parameters:
+        - $ref: '#/components/parameters/LoanId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddNoteRequest' }
+      responses:
+        '201':
+          description: Note created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/{uid}/role:
+    post:
+      tags: [admin]
+      summary: Set a user's role (custom claim + mirror)
+      description: >
+        Role ADMINISTRATOR. Sets the Firebase custom claim AND updates the users/{uid} mirror in
+        one operation, and writes an audit event (specs/12 §12.3). Claim takes effect on the
+        user's next token refresh.
+      operationId: setUserRole
+      parameters:
+        - $ref: '#/components/parameters/Uid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetRoleRequest' }
+      responses:
+        '200':
+          description: Updated user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/employers/{employerId}/status:
+    post:
+      tags: [admin]
+      summary: Set an employer's status (ACTIVE | INACTIVE)
+      description: >
+        Role ADMINISTRATOR. INACTIVE blocks NEW benefit activations only; existing benefits
+        continue to process (specs/06 §6.6a). Writes an EMPLOYER_STATUS_CHANGED event.
+      operationId: setEmployerStatus
+      parameters:
+        - name: employerId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ACTIVE, INACTIVE] }
+      responses:
+        '200':
+          description: Updated employer status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employerId: { type: string }
+                  status: { type: string, enum: [ACTIVE, INACTIVE] }
+        '202': { $ref: '#/components/responses/OperationInProgress' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness probe
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: Alive.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+
+  /readiness:
+    get:
+      tags: [system]
+      summary: Readiness probe (dependencies reachable)
+      operationId: readiness
+      security: []
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+        '503':
+          description: Not ready.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID token
+      description: Firebase Authentication ID token, verified by Django via the Admin SDK (specs/12).
+
+  parameters:
+    AgreementId:
+      name: agreementId
+      in: path
+      required: true
+      schema: { type: string }
+      example: ben_jordan_001
+    BorrowerId:
+      name: borrowerId
+      in: path
+      required: true
+      schema: { type: string }
+      example: bor_jordan
+    ContributionId:
+      name: contributionId
+      in: path
+      required: true
+      schema: { type: string }
+      example: ben_jordan_001__004
+    ExceptionId:
+      name: exceptionId
+      in: path
+      required: true
+      schema: { type: string }
+      example: ben_jordan_001__004__PAYMENT_FAILED
+    LoanId:
+      name: loanId
+      in: path
+      required: true
+      schema: { type: string }
+      example: loan_jordan_001
+    Uid:
+      name: uid
+      in: path
+      required: true
+      schema: { type: string }
+      example: firebase_user_123
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated key making the command safe to retry exactly once (specs/08).
+      schema: { type: string, minLength: 8, maxLength: 200 }
+      example: process-ben_jordan_001__004-a1b2c3
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: The caller's expected `revision` of the target entity; mismatch → 409 STALE_WRITE.
+      schema: { type: string }
+      example: "12"
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: Trace id; generated if absent and echoed into events/logs.
+      schema: { type: string }
+
+  responses:
+    OperationAccepted:
+      description: >
+        Operation accepted; asynchronous work in progress. Poll by re-POSTing the identical
+        request with the SAME Idempotency-Key (202 while running, final result when done), or
+        observe the entity document via Firestore subscription (recommended for the UI).
+        Never re-issue under a new key.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Suggested seconds before polling.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OperationStatus' }
+    OperationInProgress:
+      description: >
+        An operation for this key/entity is still running. Poll by re-POSTing the identical
+        request with the SAME Idempotency-Key, or observe the entity via subscription.
+        Any mutating endpoint may return this. Never re-issue under a new key.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OperationStatus' }
+    BenefitAgreementResult:
+      description: The updated benefit agreement.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/BenefitAgreement' }
+    ExceptionResult:
+      description: The updated operational exception.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OperationalException' }
+    BadRequest:
+      description: Validation error (e.g. missing Idempotency-Key, empty note, bad enum).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing/invalid Firebase ID token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Authenticated but the role is not permitted this command.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: >
+        Typed conflict: INVALID_TRANSITION, INVARIANT_VIOLATION, IDEMPOTENCY_KEY_REUSED,
+        STALE_WRITE, BENEFIT_NOT_ACCEPTING_PAYMENTS.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unprocessable:
+      description: Well-formed but business-invalid (e.g. activate when employment not ACTIVE).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    # ---------- enums ----------
+    Role:
+      type: string
+      enum: [OPERATIONS_USER, SERVICING_MANAGER, ADMINISTRATOR]
+    ContributionStatus:
+      type: string
+      enum: [SCHEDULED, PROCESSING, POSTED, FAILED, RETRY_PENDING, CANCELED]
+    PaymentAttemptStatus:
+      type: string
+      enum: [STARTED, SUCCEEDED, FAILED]
+    BenefitStatus:
+      type: string
+      enum: [DRAFT, PENDING, ACTIVATING, ACTIVE, SUSPENDED, COMPLETED, TERMINATED]
+    EmploymentStatus:
+      type: string
+      enum: [PENDING, ACTIVE, LEAVE, TERMINATED]
+    LoanStatus:
+      type: string
+      enum: [ACTIVE, PAID_OFF, DELINQUENT, CLOSED]
+    ExceptionStatus:
+      type: string
+      enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]
+    ExceptionType:
+      type: string
+      enum:
+        - PAYMENT_FAILED
+        - EMPLOYMENT_VERIFICATION_REQUIRED
+        - LOAN_BALANCE_MISMATCH
+        - BENEFIT_CONFIGURATION_ERROR
+        - SERVICER_SYNC_FAILURE
+        - PAYMENT_STUCK_PROCESSING
+        - TASK_FAILED
+    PaymentFailureCode:
+      type: string
+      description: Closed failure-code taxonomy (specs/09 §9.5) with retryability semantics.
+      enum:
+        - SERVICER_UNAVAILABLE
+        - SERVICER_TIMEOUT
+        - INSUFFICIENT_FUNDS
+        - ACCOUNT_FROZEN
+        - INVALID_ACCOUNT
+        - NOT_SUBMITTED
+    Severity:
+      type: string
+      enum: [LOW, MEDIUM, HIGH, CRITICAL]
+    ErrorCode:
+      type: string
+      enum:
+        - IDEMPOTENCY_KEY_REQUIRED
+        - VALIDATION_ERROR
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - INVALID_TRANSITION
+        - INVARIANT_VIOLATION
+        - IDEMPOTENCY_KEY_REUSED
+        - STALE_WRITE
+        - BENEFIT_NOT_ACCEPTING_PAYMENTS
+        - UNPROCESSABLE
+
+    # ---------- shared value objects ----------
+    Cents:
+      type: integer
+      format: int64
+      description: US cents (integer). No floating point.
+      example: 83333
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { $ref: '#/components/schemas/ErrorCode' }
+            message: { type: string }
+            correlationId: { type: string }
+    OperationStatus:
+      type: object
+      required: [state, operation]
+      properties:
+        state:
+          type: string
+          enum: [ACCEPTED, IN_PROGRESS, COMPLETED, FAILED]
+        operation: { type: string, example: ACTIVATE_BENEFIT }
+        entityType: { type: string }
+        entityId: { type: string }
+        retryAfterSeconds: { type: integer }
+        correlationId: { type: string }
+    Readiness:
+      type: object
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+        dependencies:
+          type: object
+          additionalProperties: { type: string, enum: [ok, unreachable] }
+          example: { firestore: ok, cloudTasks: ok }
+
+    # ---------- resource representations ----------
+    BenefitAgreement:
+      type: object
+      properties:
+        id: { type: string, example: ben_jordan_001 }
+        borrowerId: { type: string }
+        borrowerName: { type: string }
+        employerId: { type: string }
+        employerName: { type: string }
+        loanId: { type: string }
+        currency: { type: string, const: USD }
+        totalCommitmentCents: { $ref: '#/components/schemas/Cents' }
+        baseMonthlyContributionCents: { $ref: '#/components/schemas/Cents' }
+        termMonths: { type: integer }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time }
+        amountPaidCents: { $ref: '#/components/schemas/Cents' }
+        remainingCommitmentCents: { $ref: '#/components/schemas/Cents' }
+        status: { $ref: '#/components/schemas/BenefitStatus' }
+        acceptingPayments: { type: boolean }
+        suspendedReason: { type: [string, 'null'], enum: [LEAVE, MANUAL, null] }
+        scheduleGenerated: { type: boolean }
+        plannedInstallmentCount: { type: integer }
+        installmentsGenerated: { type: integer }
+        revision: { type: integer }
+    Contribution:
+      type: object
+      properties:
+        id: { type: string, example: ben_jordan_001__004 }
+        benefitAgreementId: { type: string }
+        installmentNumber: { type: integer }
+        borrowerId: { type: string }
+        borrowerName: { type: string }
+        employerId: { type: string }
+        employerName: { type: string }
+        loanId: { type: string }
+        currency: { type: string, const: USD }
+        scheduledDate: { type: string, format: date-time }
+        periodLabel: { type: string, example: "2026-08" }
+        scheduledAmountCents: { $ref: '#/components/schemas/Cents' }
+        postedAmountCents:
+          oneOf:
+            - $ref: '#/components/schemas/Cents'
+            - type: 'null'
+        status: { $ref: '#/components/schemas/ContributionStatus' }
+        attemptCount: { type: integer }
+        currentAttemptId: { type: [string, 'null'] }
+        currentExceptionId: { type: [string, 'null'] }
+        lastAttemptAt: { type: [string, 'null'], format: date-time }
+        postedAt: { type: [string, 'null'], format: date-time }
+        failureCode:
+          oneOf: [{ $ref: '#/components/schemas/PaymentFailureCode' }, { type: 'null' }]
+        failureReason: { type: [string, 'null'] }
+        revision: { type: integer }
+    PaymentAttempt:
+      type: object
+      properties:
+        id: { type: string, example: ben_jordan_001__004__att_001 }
+        contributionId: { type: string }
+        loanId: { type: string }
+        attemptNumber: { type: integer }
+        status: { $ref: '#/components/schemas/PaymentAttemptStatus' }
+        requestedAmountCents: { $ref: '#/components/schemas/Cents' }
+        processorReference: { type: [string, 'null'] }
+        reconcileAttempts: { type: integer, description: "indeterminate-sweep counter (specs/09 §9.4)" }
+        failureCode:
+          oneOf: [{ $ref: '#/components/schemas/PaymentFailureCode' }, { type: 'null' }]
+        failureReason: { type: [string, 'null'] }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+    OperationalException:
+      type: object
+      properties:
+        id: { type: string }
+        exceptionType: { $ref: '#/components/schemas/ExceptionType' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        severityRank: { type: integer, description: "LOW=10 MEDIUM=20 HIGH=30 CRITICAL=40" }
+        entityType: { type: string }
+        entityId: { type: string }
+        loanId: { type: [string, 'null'] }
+        borrowerId: { type: string }
+        borrowerName: { type: string }
+        employerId: { type: string }
+        employerName: { type: string }
+        status: { $ref: '#/components/schemas/ExceptionStatus' }
+        assignedTo: { type: [string, 'null'] }
+        occurrenceCount: { type: integer }
+        summary: { type: string }
+        details: { type: string }
+        firstSeenAt: { type: string, format: date-time }
+        lastSeenAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+    Loan:
+      type: object
+      properties:
+        id: { type: string }
+        borrowerId: { type: string }
+        employerId: { type: string }
+        currency: { type: string, const: USD }
+        currentBalanceCents: { $ref: '#/components/schemas/Cents' }
+        loanStatus: { $ref: '#/components/schemas/LoanStatus' }
+        benefitAgreementId: { type: [string, 'null'] }
+        benefitStatus:
+          oneOf: [{ $ref: '#/components/schemas/BenefitStatus' }, { type: 'null' }]
+        revision: { type: integer }
+    Note:
+      type: object
+      properties:
+        id: { type: string }
+        loanId: { type: string }
+        text: { type: string }
+        authorId: { type: string }
+        authorName: { type: string }
+        createdAt: { type: string, format: date-time }
+    User:
+      type: object
+      properties:
+        uid: { type: string }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        status: { type: string, enum: [ACTIVE, DISABLED] }
+        revision: { type: integer }
+
+    # ---------- composite command results ----------
+    ProcessContributionResult:
+      type: object
+      required: [contribution, attempt]
+      properties:
+        contribution: { $ref: '#/components/schemas/Contribution' }
+        attempt: { $ref: '#/components/schemas/PaymentAttempt' }
+        balances:
+          description: Present when the contribution POSTED; null on FAILED.
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                postedAmountCents: { $ref: '#/components/schemas/Cents' }
+                loanCurrentBalanceCents: { $ref: '#/components/schemas/Cents' }
+                benefitAmountPaidCents: { $ref: '#/components/schemas/Cents' }
+                benefitRemainingCommitmentCents: { $ref: '#/components/schemas/Cents' }
+        resolvedExceptionId: { type: [string, 'null'] }
+        correlationId: { type: string }
+    EmploymentChangeResult:
+      type: object
+      properties:
+        borrowerId: { type: string }
+        employmentStatus: { $ref: '#/components/schemas/EmploymentStatus' }
+        employmentEndDate: { type: [string, 'null'], format: date-time }
+        benefit:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/BenefitAgreement'
+        futureCancellation:
+          type: object
+          properties:
+            state: { type: string, enum: [NOT_APPLICABLE, IN_PROGRESS, COMPLETED] }
+        correlationId: { type: string }
+
+    # ---------- request bodies ----------
+    ActivateRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          format: date
+          description: Optional override; defaults to the agreement's configured start date.
+        expectedRevision: { type: integer }
+    ReasonRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        effectiveDate: { type: string, format: date }
+        expectedRevision: { type: integer }
+    EmploymentStatusChangeRequest:
+      type: object
+      required: [status, effectiveDate]
+      properties:
+        status:
+          type: string
+          enum: [ACTIVE, LEAVE, TERMINATED]   # PENDING is never a legal target (specs/06 §6.5)
+        effectiveDate: { type: string, format: date, example: "2026-10-14" }
+        reason: { type: string, example: "Employment ended" }
+        expectedRevision: { type: integer }
+    AssignExceptionRequest:
+      type: object
+      properties:
+        assignToUid:
+          type: [string, 'null']
+          description: >
+            Target user. Omitted = assign to the authenticated caller ("assign to me");
+            explicit null = unassign. Assignment is status-neutral (specs/06 §6.4).
+    ResolveExceptionRequest:
+      type: object
+      required: [note]
+      properties:
+        note: { type: string, minLength: 1 }
+    DismissExceptionRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+        note: { type: string }
+    CreateExceptionRequest:
+      type: object
+      required: [exceptionType, entityType, entityId, summary]
+      properties:
+        exceptionType: { $ref: '#/components/schemas/ExceptionType' }
+        entityType: { type: string, example: BORROWER }
+        entityId: { type: string }
+        summary: { type: string, minLength: 1 }
+        details: { type: string }
+        severity:
+          oneOf: [{ $ref: '#/components/schemas/Severity' }, { type: 'null' }]
+          description: Optional override; defaults from the specs/04 §4.10 type map.
+    AddNoteRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, description: Non-empty; empty is rejected 400. }
+    SetRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }

@@ -1,0 +1,812 @@
+<!-- BenefitServicing Workbench — interactive wireframe mockup (design review).
+     Content-only HTML: also rendered as a Claude Artifact. Non-functional; data is the
+     spec seed set (specs/18). Screens & fields per specs/15, statuses per specs/06. -->
+<title>BenefitServicing Workbench — Wireframes</title>
+<style>
+  :root {
+    --plane:#e9eeed; --surface:#ffffff; --surface-2:#f6f8f8; --border:#e2e7e6;
+    --ink:#17201f; --ink-2:#556360; --muted:#8a9793;
+    --accent:#0d7d74; --accent-2:#0a6a62; --accent-ink:#ffffff;
+    --good:#0a7d20; --warn:#8a5e00; --serious:#b0491f; --crit:#b02626; --info:#1f5fae; --neutral:#5a6764;
+    --shadow:0 1px 2px rgba(16,32,30,.06),0 1px 1px rgba(16,32,30,.04);
+    --r:8px; --r-sm:6px;
+    --fs-hero:29px; --fs-h1:20px; --fs-h2:14px; --fs-body:13px; --fs-sm:12px; --fs-xs:11px;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --plane:#0b1110; --surface:#121a18; --surface-2:#18211f; --border:#28322f;
+      --ink:#eef3f1; --ink-2:#a8b4b0; --muted:#6f7d79;
+      --accent:#23a99d; --accent-2:#2cbcae; --accent-ink:#08201d;
+      --good:#46d162; --warn:#eab53f; --serious:#f39160; --crit:#f06b6b; --info:#5aa2ea; --neutral:#98a5a1;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="light"] {
+    --plane:#e9eeed; --surface:#ffffff; --surface-2:#f6f8f8; --border:#e2e7e6;
+    --ink:#17201f; --ink-2:#556360; --muted:#8a9793;
+    --accent:#0d7d74; --accent-2:#0a6a62; --accent-ink:#ffffff;
+    --good:#0a7d20; --warn:#8a5e00; --serious:#b0491f; --crit:#b02626; --info:#1f5fae; --neutral:#5a6764;
+    --shadow:0 1px 2px rgba(16,32,30,.06),0 1px 1px rgba(16,32,30,.04);
+  }
+  :root[data-theme="dark"] {
+    --plane:#0b1110; --surface:#121a18; --surface-2:#18211f; --border:#28322f;
+    --ink:#eef3f1; --ink-2:#a8b4b0; --muted:#6f7d79;
+    --accent:#23a99d; --accent-2:#2cbcae; --accent-ink:#08201d;
+    --good:#46d162; --warn:#eab53f; --serious:#f39160; --crit:#f06b6b; --info:#5aa2ea; --neutral:#98a5a1;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing:border-box; }
+  .app, .app *::before, .app *::after { box-sizing:border-box; }
+  .app {
+    font-family:var(--sans); background:var(--plane); color:var(--ink);
+    font-size:var(--fs-body); line-height:1.45; -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:grid; grid-template-columns:216px 1fr; grid-template-rows:56px 1fr;
+    grid-template-areas:"brand top" "nav main";
+  }
+  .app :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  @media (prefers-reduced-motion: reduce){ .app *{ transition:none!important; animation:none!important; } }
+  .num { font-variant-numeric:tabular-nums; font-family:var(--mono); }
+
+  /* ---- brand + top bar ---- */
+  .brand { grid-area:brand; display:flex; align-items:center; gap:9px; padding:0 16px;
+    background:var(--surface); border-right:1px solid var(--border); border-bottom:1px solid var(--border); }
+  .brand .mark { width:26px;height:26px;border-radius:7px;background:var(--accent);color:var(--accent-ink);
+    display:grid;place-items:center;font-weight:700;font-size:14px;flex:none; }
+  .brand b { font-size:13.5px; letter-spacing:-.01em; }
+  .brand span { color:var(--muted); font-size:10px; letter-spacing:.08em; text-transform:uppercase; display:block; margin-top:-2px;}
+
+  .topbar { grid-area:top; display:flex; align-items:center; gap:12px; padding:0 16px;
+    background:var(--surface); border-bottom:1px solid var(--border); }
+  .search { flex:1; max-width:420px; position:relative; }
+  .search input { width:100%; height:32px; padding:0 10px 0 30px; border-radius:var(--r-sm);
+    border:1px solid var(--border); background:var(--surface-2); color:var(--ink); font-size:var(--fs-sm); font-family:var(--sans); }
+  .search input::placeholder{ color:var(--muted); }
+  .search svg { position:absolute; left:9px; top:8px; color:var(--muted); }
+  .topbar .spacer { flex:1; }
+  .seg { display:flex; align-items:center; gap:0; border:1px solid var(--border); border-radius:var(--r-sm); overflow:hidden; }
+  .seg select { border:0; background:var(--surface); color:var(--ink); font:inherit; font-size:var(--fs-sm); height:32px; padding:0 8px; }
+  .rolewrap { display:flex; align-items:center; gap:7px; }
+  .rolewrap > label { font-size:var(--fs-xs); color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .iconbtn { width:32px;height:32px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-sm);
+    display:grid; place-items:center; color:var(--ink-2); cursor:pointer; }
+  .iconbtn:hover { color:var(--accent); border-color:var(--accent); }
+  .avatar { width:30px;height:30px;border-radius:50%; background:color-mix(in oklab,var(--accent) 20%,var(--surface));
+    color:var(--accent); display:grid;place-items:center; font-weight:700; font-size:12px; }
+
+  /* ---- side nav ---- */
+  nav.side { grid-area:nav; background:var(--surface); border-right:1px solid var(--border); padding:12px 10px; display:flex; flex-direction:column; gap:2px; }
+  nav.side .navlbl { font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); padding:8px 10px 4px; }
+  .navitem { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--r-sm); color:var(--ink-2);
+    cursor:pointer; font-weight:500; font-size:13px; border:1px solid transparent; user-select:none; }
+  .navitem svg { color:var(--muted); flex:none; }
+  .navitem:hover { background:var(--surface-2); color:var(--ink); }
+  .navitem.active { background:color-mix(in oklab,var(--accent) 11%,var(--surface)); color:var(--accent); border-color:color-mix(in oklab,var(--accent) 22%,var(--surface)); }
+  .navitem.active svg { color:var(--accent); }
+  .navitem .badge { margin-left:auto; font-size:10px; font-weight:700; background:color-mix(in oklab,var(--crit) 16%,var(--surface));
+    color:var(--crit); border-radius:999px; padding:1px 6px; font-variant-numeric:tabular-nums; }
+  nav.side .foot { margin-top:auto; padding:10px; font-size:10.5px; color:var(--muted); line-height:1.5; border-top:1px solid var(--border); }
+
+  /* ---- main ---- */
+  main { grid-area:main; overflow:auto; padding:20px 24px 40px; }
+  .screen { display:none; }
+  .screen.active { display:block; animation:fade .18s ease; }
+  @keyframes fade { from{opacity:0; transform:translateY(3px);} to{opacity:1; transform:none;} }
+  .head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:16px; }
+  .head h1 { margin:0; font-size:var(--fs-h1); letter-spacing:-.02em; text-wrap:balance; }
+  .head .sub { color:var(--ink-2); font-size:var(--fs-sm); margin-top:3px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+  .btn { height:32px; padding:0 12px; border-radius:var(--r-sm); border:1px solid var(--border); background:var(--surface);
+    color:var(--ink); font:inherit; font-size:var(--fs-sm); font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .btn:hover { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.primary:hover { background:var(--accent-2); border-color:var(--accent-2); color:var(--accent-ink); }
+  .btn.danger:hover { border-color:var(--crit); color:var(--crit); }
+  .btn[disabled], .btn.is-locked { opacity:.42; cursor:not-allowed; }
+  .btn[disabled]:hover, .btn.is-locked:hover { border-color:var(--border); color:var(--ink); }
+  .btn .lock { color:var(--muted); }
+
+  /* ---- cards ---- */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r); box-shadow:var(--shadow); }
+  .card > .card-h { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid var(--border); }
+  .card-h h2 { margin:0; font-size:var(--fs-h2); font-weight:650; letter-spacing:-.01em; }
+  .card-h .meta { font-size:var(--fs-xs); color:var(--muted); }
+  .grid { display:grid; gap:14px; }
+
+  /* ---- KPI tiles ---- */
+  .kpis { grid-template-columns:repeat(4,1fr); }
+  @media (max-width:1100px){ .kpis{ grid-template-columns:repeat(2,1fr);} }
+  .kpi { padding:13px 15px; }
+  .kpi .k-lbl { font-size:var(--fs-xs); color:var(--muted); text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:6px; }
+  .kpi .k-val { font-size:var(--fs-hero); font-weight:680; letter-spacing:-.02em; margin-top:6px; line-height:1; }
+  .kpi .k-val.mono { font-family:var(--mono); font-weight:600; }
+  .kpi .k-sub { font-size:var(--fs-xs); color:var(--ink-2); margin-top:7px; display:flex; align-items:center; gap:6px; }
+  .spark { display:block; margin-top:8px; }
+
+  /* ---- pills ---- */
+  .pill { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:999px; font-size:var(--fs-xs);
+    font-weight:650; letter-spacing:.01em; line-height:1.55; border:1px solid; white-space:nowrap; }
+  .pill .dot { width:6px;height:6px;border-radius:50%; background:currentColor; }
+  .s-good{--c:var(--good);} .s-warn{--c:var(--warn);} .s-serious{--c:var(--serious);}
+  .s-crit{--c:var(--crit);} .s-info{--c:var(--info);} .s-neutral{--c:var(--neutral);}
+  .pill{ color:var(--c); background:color-mix(in oklab,var(--c) 12%,var(--surface)); border-color:color-mix(in oklab,var(--c) 26%,var(--surface)); }
+
+  /* ---- tables ---- */
+  .twrap { overflow-x:auto; }
+  table.tbl { width:100%; border-collapse:collapse; font-size:var(--fs-body); }
+  .tbl thead th { position:sticky; top:0; background:var(--surface-2); text-align:left; font-size:var(--fs-xs); text-transform:uppercase;
+    letter-spacing:.05em; color:var(--muted); font-weight:650; padding:9px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .tbl tbody td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap; }
+  .tbl tbody tr:last-child td { border-bottom:0; }
+  .tbl tbody tr.clickable { cursor:pointer; }
+  .tbl tbody tr.clickable:hover { background:var(--surface-2); }
+  .tbl .who { display:flex; flex-direction:column; gap:1px; }
+  .tbl .who b { font-weight:600; }
+  .tbl .who small { color:var(--muted); font-size:11px; }
+  td.r, th.r { text-align:right; }
+  .money { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+  .chip-x { font-size:11px; color:var(--muted); }
+  .exc-dot { display:inline-flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums; }
+  .exc-dot i { width:7px;height:7px;border-radius:50%; display:inline-block; }
+
+  /* severity stripe cell */
+  .sev { display:inline-flex; align-items:center; gap:8px; }
+  .sev i { width:3px; height:22px; border-radius:2px; flex:none; }
+  .sev--LOW i{background:var(--neutral);} .sev--MEDIUM i{background:var(--warn);}
+  .sev--HIGH i{background:var(--serious);} .sev--CRITICAL i{background:var(--crit);}
+  .sev b { font-size:11px; font-weight:700; letter-spacing:.03em; }
+  .sev--LOW b{color:var(--neutral);} .sev--MEDIUM b{color:var(--warn);}
+  .sev--HIGH b{color:var(--serious);} .sev--CRITICAL b{color:var(--crit);}
+
+  /* ---- tabs ---- */
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:0; padding:0 4px; flex-wrap:wrap; }
+  .tab { padding:9px 12px; font-size:var(--fs-sm); font-weight:600; color:var(--ink-2); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; display:flex; align-items:center; gap:7px; }
+  .tab:hover { color:var(--ink); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab .cnt { font-size:10px; font-weight:700; background:var(--surface-2); border:1px solid var(--border); color:var(--ink-2); border-radius:999px; padding:0 6px; font-variant-numeric:tabular-nums; }
+  .tab.active .cnt { background:color-mix(in oklab,var(--accent) 12%,var(--surface)); color:var(--accent); border-color:transparent; }
+
+  /* ---- charts ---- */
+  .charts { grid-template-columns:1.3fr 1fr; }
+  @media (max-width:1100px){ .charts{ grid-template-columns:1fr; } }
+  .legend { display:flex; flex-wrap:wrap; gap:10px 16px; padding:12px 14px 0; }
+  .legend .li { display:flex; align-items:center; gap:6px; font-size:var(--fs-xs); color:var(--ink-2); }
+  .legend .li i { width:9px;height:9px;border-radius:3px; }
+  .stack { display:flex; height:26px; border-radius:6px; overflow:hidden; gap:2px; padding:12px 14px 4px; box-sizing:content-box; }
+  .stack i { height:26px; border-radius:3px; }
+  .barrow { display:grid; grid-template-columns:180px 1fr 42px; align-items:center; gap:10px; padding:6px 14px; font-size:var(--fs-sm); }
+  .barrow .tk { color:var(--ink-2); }
+  .barrow .track { height:9px; background:var(--surface-2); border-radius:5px; overflow:hidden; }
+  .barrow .fill { height:9px; border-radius:5px; background:var(--accent); }
+  .barrow .n { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink-2); }
+  .meter { padding:12px 14px; }
+  .meter .track { height:12px; background:var(--surface-2); border-radius:7px; overflow:hidden; display:flex; }
+  .meter .track i { height:12px; }
+  .meter .lg { display:flex; justify-content:space-between; margin-top:8px; font-size:var(--fs-xs); color:var(--ink-2); }
+
+  /* ---- detail ---- */
+  .detail-grid { grid-template-columns:2fr 1fr; align-items:start; }
+  @media (max-width:1100px){ .detail-grid{ grid-template-columns:1fr; } }
+  .facts { display:grid; grid-template-columns:1fr 1fr; gap:0; }
+  .facts .f { padding:11px 14px; border-bottom:1px solid var(--border); }
+  .facts .f:nth-child(odd){ border-right:1px solid var(--border); }
+  .facts .f .l { font-size:var(--fs-xs); color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .facts .f .v { margin-top:3px; font-weight:600; }
+  .facts .f .v.money { font-weight:600; }
+  .timeline { padding:6px 14px 14px; }
+  .tl { display:grid; grid-template-columns:14px 1fr; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+  .tl:last-child{ border-bottom:0; }
+  .tl .rail { display:flex; flex-direction:column; align-items:center; }
+  .tl .rail i { width:9px;height:9px;border-radius:50%; margin-top:4px; background:var(--accent); border:2px solid var(--surface); box-shadow:0 0 0 1px var(--border); }
+  .tl .rail .line { flex:1; width:2px; background:var(--border); margin-top:2px; }
+  .tl .ev b { font-size:12.5px; }
+  .tl .ev .m { color:var(--ink-2); font-size:12px; margin-top:1px; }
+  .tl .ev .t { color:var(--muted); font-size:11px; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .note { padding:11px 14px; border-bottom:1px solid var(--border); }
+  .note:last-child{border-bottom:0;}
+  .note .h { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-bottom:4px; }
+  .note p { margin:0; font-size:12.5px; }
+  .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .filters select, .filters .fchip { height:30px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-sm);
+    font:inherit; font-size:var(--fs-sm); color:var(--ink); padding:0 9px; }
+  .filters .fchip { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); }
+  .backlink { display:inline-flex; align-items:center; gap:6px; color:var(--ink-2); cursor:pointer; font-size:var(--fs-sm); font-weight:600; margin-bottom:8px; }
+  .backlink:hover { color:var(--accent); }
+  .wf-note { margin-top:22px; padding:11px 14px; border:1px dashed var(--border); border-radius:var(--r); color:var(--muted); font-size:var(--fs-xs); background:var(--surface); }
+  .rowsub { color:var(--muted); font-size:11px; }
+</style>
+
+<div class="app" id="app">
+  <div class="brand">
+    <div class="mark">B</div>
+    <div><b>BenefitServicing</b><span>Workbench</span></div>
+  </div>
+
+  <div class="topbar">
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input placeholder="Search borrower, loan reference, or employer…" aria-label="Search"/>
+    </div>
+    <div class="spacer"></div>
+    <div class="rolewrap">
+      <label for="role">View as</label>
+      <div class="seg">
+        <select id="role" aria-label="Active role">
+          <option value="3">Administrator</option>
+          <option value="2" selected>Servicing Manager</option>
+          <option value="1">Operations User</option>
+        </select>
+      </div>
+    </div>
+    <button class="iconbtn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
+    <div class="avatar" title="Alex Operator">AO</div>
+  </div>
+
+  <nav class="side">
+    <div class="navlbl">Servicing</div>
+    <div class="navitem active" data-screen="dashboard">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      Dashboard
+    </div>
+    <div class="navitem" data-screen="loans">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
+      Loans
+    </div>
+    <div class="navitem" data-screen="payments">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      Payments
+      <span class="badge">7</span>
+    </div>
+    <div class="navitem" data-screen="exceptions">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v5M12 18h.01"/></svg>
+      Exceptions
+      <span class="badge">5</span>
+    </div>
+    <div class="foot">Demo build · seed portfolio<br/>Firestore emulator · 4 employers, 20 borrowers</div>
+  </nav>
+
+  <main>
+    <!-- ================= DASHBOARD ================= -->
+    <section class="screen active" id="screen-dashboard">
+      <div class="head">
+        <div>
+          <h1>Portfolio dashboard</h1>
+          <div class="sub">Servicing health across 4 employers · July 2026</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-goto="payments">Open payment queue</button>
+          <button class="btn" data-goto="exceptions">Open exceptions</button>
+        </div>
+      </div>
+
+      <div class="grid kpis" style="margin-bottom:14px">
+        <div class="card kpi">
+          <div class="k-lbl">Active loans</div>
+          <div class="k-val">18</div>
+          <div class="k-sub"><span class="pill s-good"><span class="dot"></span>16 with active benefit</span></div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Scheduled this month</div>
+          <div class="k-val mono">$12,500.00</div>
+          <svg class="spark" width="150" height="26" viewBox="0 0 150 26" fill="none" aria-hidden="true">
+            <path d="M0 20 L30 18 L60 17 L90 15 L120 15 L150 14" stroke="var(--info)" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Posted this month</div>
+          <div class="k-val mono">$10,350.00</div>
+          <div class="k-sub"><span class="num" style="color:var(--good)">82.8%</span> of scheduled · 96 contributions</div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Remaining commitment</div>
+          <div class="k-val mono">$726,000</div>
+          <div class="k-sub">across 4 employer programs</div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Failed contributions</div>
+          <div class="k-val" style="color:var(--crit)">4</div>
+          <div class="k-sub"><span class="pill s-serious"><span class="dot"></span>3 retry pending</span></div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Open exceptions</div>
+          <div class="k-val" style="color:var(--warn)">5</div>
+          <div class="k-sub">1 critical · 2 high · 2 medium</div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Processing now</div>
+          <div class="k-val">3</div>
+          <div class="k-sub">in-flight payment attempts</div>
+        </div>
+        <div class="card kpi">
+          <div class="k-lbl">Active benefit agreements</div>
+          <div class="k-val">16</div>
+          <div class="k-sub">1 nearing completion · 2 suspended</div>
+        </div>
+      </div>
+
+      <div class="grid charts" style="margin-bottom:14px">
+        <div class="card">
+          <div class="card-h"><h2>Monthly scheduled vs. posted</h2><span class="meta">$ thousands</span></div>
+          <div style="padding:14px 14px 6px">
+            <svg width="100%" height="180" viewBox="0 0 520 180" preserveAspectRatio="none" role="img" aria-label="Monthly scheduled versus posted amounts">
+              <line x1="40" y1="150" x2="520" y2="150" stroke="var(--border)" stroke-width="1"/>
+              <line x1="40" y1="100" x2="520" y2="100" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 4"/>
+              <line x1="40" y1="50"  x2="520" y2="50"  stroke="var(--border)" stroke-width="1" stroke-dasharray="2 4"/>
+              <text x="34" y="153" text-anchor="end" font-size="9" fill="var(--muted)">0</text>
+              <text x="34" y="103" text-anchor="end" font-size="9" fill="var(--muted)">6.5</text>
+              <text x="34" y="53"  text-anchor="end" font-size="9" fill="var(--muted)">13</text>
+              <!-- 6 months, scheduled (info) + posted (good) -->
+              <g>
+                <rect x="60"  y="59"  width="20" height="91" rx="3" fill="var(--info)"/>  <rect x="82"  y="59"  width="20" height="91" rx="3" fill="var(--good)"/>
+                <rect x="138" y="57"  width="20" height="93" rx="3" fill="var(--info)"/>  <rect x="160" y="57"  width="20" height="93" rx="3" fill="var(--good)"/>
+                <rect x="216" y="57"  width="20" height="93" rx="3" fill="var(--info)"/>  <rect x="238" y="63"  width="20" height="87" rx="3" fill="var(--good)"/>
+                <rect x="294" y="54"  width="20" height="96" rx="3" fill="var(--info)"/>  <rect x="316" y="54"  width="20" height="96" rx="3" fill="var(--good)"/>
+                <rect x="372" y="54"  width="20" height="96" rx="3" fill="var(--info)"/>  <rect x="394" y="59"  width="20" height="91" rx="3" fill="var(--good)"/>
+                <rect x="450" y="54"  width="20" height="96" rx="3" fill="var(--info)"/>  <rect x="472" y="70"  width="20" height="80" rx="3" fill="var(--good)"/>
+              </g>
+              <g font-size="9" fill="var(--muted)" text-anchor="middle">
+                <text x="81" y="164">Feb</text><text x="159" y="164">Mar</text><text x="237" y="164">Apr</text>
+                <text x="315" y="164">May</text><text x="393" y="164">Jun</text><text x="471" y="164">Jul</text>
+              </g>
+            </svg>
+          </div>
+          <div class="legend" style="padding-bottom:12px">
+            <span class="li"><i style="background:var(--info)"></i>Scheduled</span>
+            <span class="li"><i style="background:var(--good)"></i>Posted</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Contribution status mix</h2><span class="meta">260 this cycle</span></div>
+          <div class="stack" aria-hidden="true">
+            <i style="flex:142; background:var(--info)"></i>
+            <i style="flex:96; background:var(--good)"></i>
+            <i style="flex:12; background:var(--neutral)"></i>
+            <i style="flex:4; background:var(--crit)"></i>
+            <i style="flex:3; background:var(--serious)"></i>
+            <i style="flex:3; background:var(--warn)"></i>
+          </div>
+          <div class="legend">
+            <span class="li"><i style="background:var(--info)"></i>Scheduled 142</span>
+            <span class="li"><i style="background:var(--good)"></i>Posted 96</span>
+            <span class="li"><i style="background:var(--neutral)"></i>Canceled 12</span>
+            <span class="li"><i style="background:var(--crit)"></i>Failed 4</span>
+            <span class="li"><i style="background:var(--serious)"></i>Retry 3</span>
+            <span class="li"><i style="background:var(--warn)"></i>Processing 3</span>
+          </div>
+          <div class="card-h" style="border-top:1px solid var(--border);margin-top:8px"><h2>Open exceptions by type</h2></div>
+          <div style="padding:6px 0 12px">
+            <div class="barrow"><span class="tk">Payment failed</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">3</span></div>
+            <div class="barrow"><span class="tk">Servicer sync failure</span><span class="track"><span class="fill" style="width:33%"></span></span><span class="n">1</span></div>
+            <div class="barrow"><span class="tk">Employment verification</span><span class="track"><span class="fill" style="width:33%"></span></span><span class="n">1</span></div>
+            <div class="barrow"><span class="tk">Loan balance mismatch</span><span class="track"><span class="fill" style="width:0"></span></span><span class="n">0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        <div class="card">
+          <div class="card-h"><h2>Employer commitment utilization</h2><span class="meta">posted / committed</span></div>
+          <div class="meter">
+            <div class="track"><i style="width:25%; background:var(--accent)"></i></div>
+            <div class="lg"><span>Memorial Health</span><span class="num">$215,000 / $850,000 · 25%</span></div>
+          </div>
+          <div class="meter" style="padding-top:0">
+            <div class="track"><i style="width:74%; background:var(--accent)"></i></div>
+            <div class="lg"><span>Northwind Logistics</span><span class="num">$111,500 / $150,000 · 74%</span></div>
+          </div>
+          <div class="meter" style="padding-top:0">
+            <div class="track"><i style="width:76%; background:var(--accent)"></i></div>
+            <div class="lg"><span>Cedar Grove Schools</span><span class="num">$60,400 / $80,000 · 76%</span></div>
+          </div>
+          <div class="meter" style="padding-top:0">
+            <div class="track"><i style="width:73%; background:var(--accent)"></i></div>
+            <div class="lg"><span>Astra Manufacturing</span><span class="num">$87,100 / $120,000 · 73%</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Recent servicing activity</h2><span class="meta">live timeline</span></div>
+          <div class="timeline" style="padding-top:10px">
+            <div class="tl"><div class="rail"><i style="background:var(--serious)"></i><div class="line"></div></div><div class="ev"><b>Retry scheduled</b><div class="m">Jordan Lee · installment 011 → RETRY_PENDING</div><div class="t">09:14 · Alex Operator</div></div></div>
+            <div class="tl"><div class="rail"><i style="background:var(--crit)"></i><div class="line"></div></div><div class="ev"><b>Payment failed</b><div class="m">Jordan Lee · SERVICER_UNAVAILABLE</div><div class="t">09:12 · System</div></div></div>
+            <div class="tl"><div class="rail"><i style="background:var(--good)"></i><div class="line"></div></div><div class="ev"><b>Payment posted</b><div class="m">Dana Osei · $833.33 → balance $12,004.55</div><div class="t">06:02 · System</div></div></div>
+            <div class="tl"><div class="rail"><i style="background:var(--info)"></i></div><div class="ev"><b>Benefit activated</b><div class="m">Priya Nair · 36-month schedule generated</div><div class="t">Yesterday · Sam Rivera</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="wf-note">Design wireframe · non-functional. Data is the spec seed set (specs/18). Statuses, fields, and role gating follow specs/06, /12, /15. Switch <b>View as</b> and toggle the theme to see role-gating and both color schemes.</div>
+    </section>
+
+    <!-- ================= LOANS ================= -->
+    <section class="screen" id="screen-loans">
+      <div class="head">
+        <div><h1>Loan portfolio</h1><div class="sub">20 loans · click a row to open the account</div></div>
+      </div>
+      <div class="filters">
+        <select><option>Employer: All</option><option>Memorial Health</option><option>Northwind Logistics</option><option>Cedar Grove Schools</option><option>Astra Manufacturing</option></select>
+        <select><option>Benefit: All</option><option>Pending</option><option>Activating</option><option>Active</option><option>Suspended</option><option>Terminated</option><option>Completed</option></select>
+        <select><option>Employment: All</option><option>Pending</option><option>Active</option><option>Leave</option><option>Terminated</option></select>
+        <select><option>Loan status: All</option><option>Active</option><option>Delinquent</option><option>Paid off</option><option>Closed</option></select>
+        <span class="fchip">☑ Has open exception</span>
+      </div>
+      <div class="card">
+        <div class="twrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Borrower</th><th>Employer</th><th>Servicer</th><th class="r">Balance</th><th>Benefit</th>
+              <th class="r">Monthly</th><th>Next</th><th class="r">Excep.</th><th>Loan</th>
+            </tr></thead>
+            <tbody>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Jordan Lee</b><small>jordan.lee@memorial.org</small></td>
+                <td>Memorial Health</td><td>Meridian Servicing</td><td class="r money">$71,420.00</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+                <td class="r money">$833.33</td><td class="num">Aug 1</td>
+                <td class="r"><span class="exc-dot"><i style="background:var(--serious)"></i>1</span></td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Priya Nair</b><small>Memorial Health</small></td>
+                <td>Memorial Health</td><td>Meridian Servicing</td><td class="r money">$54,210.00</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+                <td class="r money">$625.00</td><td class="num">Aug 1</td><td class="r">0</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Marcus Bell</b><small>Northwind Logistics</small></td>
+                <td>Northwind Logistics</td><td>Aster Loan Co.</td><td class="r money">$88,900.00</td>
+                <td><span class="pill s-warn"><span class="dot"></span>Suspended</span></td>
+                <td class="r money">$500.00</td><td class="num rowsub">—</td>
+                <td class="r"><span class="exc-dot"><i style="background:var(--warn)"></i>1</span></td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Dana Osei</b><small>Cedar Grove Schools</small></td>
+                <td>Cedar Grove Schools</td><td>Meridian Servicing</td><td class="r money">$12,004.55</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+                <td class="r money">$833.33</td><td class="num">Aug 1</td><td class="r">0</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Wei Chen</b><small>Memorial Health</small></td>
+                <td>Memorial Health</td><td>Meridian Servicing</td><td class="r money">$46,780.00</td>
+                <td><span class="pill s-neutral"><span class="dot"></span>Terminated</span></td>
+                <td class="r money">$750.00</td><td class="num rowsub">—</td><td class="r">0</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Tomas Alvarez</b><small>Northwind Logistics</small></td>
+                <td>Northwind Logistics</td><td>Aster Loan Co.</td><td class="r money">$67,220.00</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+                <td class="r money">$700.00</td><td class="num">Aug 3</td>
+                <td class="r"><span class="exc-dot"><i style="background:var(--crit)"></i>2</span></td>
+                <td><span class="pill s-serious"><span class="dot"></span>Delinquent</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Aisha Khan</b><small>Cedar Grove Schools</small></td>
+                <td>Cedar Grove Schools</td><td>Meridian Servicing</td><td class="r money">$5,000.00</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span> <span class="chip-x">≈ complete</span></td>
+                <td class="r money">$416.67</td><td class="num rowsub">—</td><td class="r">0</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Liam Walsh</b><small>Astra Manufacturing</small></td>
+                <td>Astra Manufacturing</td><td>Aster Loan Co.</td><td class="r money">$59,000.00</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+                <td class="r money">$900.00</td><td class="num">Aug 5</td>
+                <td class="r"><span class="exc-dot"><i style="background:var(--crit)"></i>1</span></td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+              <tr class="clickable" data-open="detail">
+                <td class="who"><b>Nadia Haddad</b><small>Memorial Health</small></td>
+                <td>Memorial Health</td><td>Meridian Servicing</td><td class="r money">$34,120.00</td>
+                <td><span class="pill s-neutral"><span class="dot"></span>Pending</span></td>
+                <td class="r money">$600.00</td><td class="num rowsub">—</td><td class="r">0</td>
+                <td><span class="pill s-good"><span class="dot"></span>Active</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= DETAIL ================= -->
+    <section class="screen" id="screen-detail">
+      <div class="backlink" data-goto="loans">‹ Loan portfolio</div>
+      <div class="head">
+        <div>
+          <h1>Jordan Lee</h1>
+          <div class="sub">Memorial Health · Loan LN-203945 · Meridian Servicing · <span style="color:var(--good)">Benefit active</span> · Employment active</div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" data-min-role="2">Process payment</button>
+          <button class="btn" data-min-role="1">Retry failed payment</button>
+          <button class="btn" data-min-role="2">Suspend benefit</button>
+          <button class="btn danger" data-min-role="2">Terminate benefit</button>
+          <button class="btn" data-min-role="2">Change employment</button>
+          <button class="btn" data-min-role="1">Add note</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:repeat(4,1fr); margin-bottom:14px">
+        <div class="card kpi"><div class="k-lbl">Loan balance</div><div class="k-val mono">$71,420.00</div><div class="k-sub">from $84,000.00 principal</div></div>
+        <div class="card kpi"><div class="k-lbl">Commitment paid</div><div class="k-val mono">$8,333.30</div><div class="k-sub">of $30,000.00 · 27.8%</div></div>
+        <div class="card kpi"><div class="k-lbl">Remaining commitment</div><div class="k-val mono">$21,666.70</div><div class="k-sub">26 installments left</div></div>
+        <div class="card kpi"><div class="k-lbl">Monthly contribution</div><div class="k-val mono">$833.33</div><div class="k-sub">36-month term</div></div>
+      </div>
+
+      <div class="grid detail-grid">
+        <div class="grid" style="gap:14px">
+          <div class="card">
+            <div class="card-h"><h2>Benefit agreement</h2><span class="pill s-good"><span class="dot"></span>Active</span></div>
+            <div class="facts">
+              <div class="f"><div class="l">Agreement</div><div class="v num">ben_jordan_001</div></div>
+              <div class="f"><div class="l">Term</div><div class="v">36 months · Sep 2025 – Aug 2028</div></div>
+              <div class="f"><div class="l">Total commitment</div><div class="v money">$30,000.00</div></div>
+              <div class="f"><div class="l">Base monthly</div><div class="v money">$833.33</div></div>
+              <div class="f"><div class="l">Accepting payments</div><div class="v">Yes</div></div>
+              <div class="f"><div class="l">Schedule</div><div class="v">36 / 36 generated · sums to $30,000.00</div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>Contribution schedule</h2><span class="meta">installments 001–036</span></div>
+            <div class="twrap">
+              <table class="tbl">
+                <thead><tr><th>#</th><th>Period</th><th class="r">Amount</th><th>Status</th><th class="r">Attempts</th><th>Posted / due</th></tr></thead>
+                <tbody>
+                  <tr><td class="num">009</td><td class="num">May 2026</td><td class="r money">$833.33</td><td><span class="pill s-good"><span class="dot"></span>Posted</span></td><td class="r num">1</td><td class="num rowsub">May 1</td></tr>
+                  <tr><td class="num">010</td><td class="num">Jun 2026</td><td class="r money">$833.33</td><td><span class="pill s-good"><span class="dot"></span>Posted</span></td><td class="r num">1</td><td class="num rowsub">Jun 1</td></tr>
+                  <tr style="background:color-mix(in oklab,var(--crit) 5%,var(--surface))"><td class="num">011</td><td class="num">Jul 2026</td><td class="r money">$833.33</td><td><span class="pill s-serious"><span class="dot"></span>Retry pending</span></td><td class="r num">1</td><td class="num rowsub">Jul 1 · failed</td></tr>
+                  <tr><td class="num">012</td><td class="num">Aug 2026</td><td class="r money">$833.33</td><td><span class="pill s-info"><span class="dot"></span>Scheduled</span></td><td class="r num">0</td><td class="num rowsub">Aug 1</td></tr>
+                  <tr><td class="num">013</td><td class="num">Sep 2026</td><td class="r money">$833.33</td><td><span class="pill s-info"><span class="dot"></span>Scheduled</span></td><td class="r num">0</td><td class="num rowsub">Sep 1</td></tr>
+                  <tr><td class="num">036</td><td class="num">Aug 2028</td><td class="r money">$833.45</td><td><span class="pill s-info"><span class="dot"></span>Scheduled</span></td><td class="r num">0</td><td class="num rowsub">final · +residual</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>Payment attempts · installment 011</h2><span class="meta">retry scheduled — next attempt created at processing</span></div>
+            <div class="twrap">
+              <table class="tbl">
+                <thead><tr><th>Attempt</th><th class="r">Amount</th><th>Status</th><th>Processor ref</th><th>Failure</th><th>When</th></tr></thead>
+                <tbody>
+                  <tr><td class="num">att_001</td><td class="r money">$833.33</td><td><span class="pill s-crit"><span class="dot"></span>Failed</span></td><td class="num rowsub">sim_48392</td><td><span style="color:var(--crit)">SERVICER_UNAVAILABLE</span></td><td class="num rowsub">Jul 11 09:12</td></tr>
+                  </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>Operational exceptions</h2></div>
+            <div class="twrap">
+              <table class="tbl">
+                <thead><tr><th>Severity</th><th>Type</th><th>Summary</th><th>Status</th><th>When</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="sev sev--HIGH"><i></i><b>HIGH</b></span></td><td>Payment failed</td><td>Employer contribution failed · installment 011</td><td><span class="pill s-info"><span class="dot"></span>In review</span></td><td class="num rowsub">Jul 11 09:12</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid" style="gap:14px">
+          <div class="card">
+            <div class="card-h"><h2>Servicing timeline</h2></div>
+            <div class="timeline">
+              <div class="tl"><div class="rail"><i style="background:var(--serious)"></i><div class="line"></div></div><div class="ev"><b>PAYMENT_RETRY_SCHEDULED</b><div class="m">011 → RETRY_PENDING</div><div class="t">Jul 11 09:14 · Alex Operator · seq 1</div></div></div>
+              <div class="tl"><div class="rail"><i style="background:var(--warn)"></i><div class="line"></div></div><div class="ev"><b>EXCEPTION_CREATED</b><div class="m">PAYMENT_FAILED · HIGH</div><div class="t">Jul 11 09:12 · System · seq 3</div></div></div>
+              <div class="tl"><div class="rail"><i style="background:var(--crit)"></i><div class="line"></div></div><div class="ev"><b>PAYMENT_FAILED</b><div class="m">att_001 · SERVICER_UNAVAILABLE</div><div class="t">Jul 11 09:12 · System · seq 2</div></div></div>
+              <div class="tl"><div class="rail"><i style="background:var(--info)"></i><div class="line"></div></div><div class="ev"><b>PAYMENT_PROCESSING</b><div class="m">011 → PROCESSING</div><div class="t">Jul 11 09:11 · System · seq 1</div></div></div>
+              <div class="tl"><div class="rail"><i style="background:var(--good)"></i><div class="line"></div></div><div class="ev"><b>PAYMENT_POSTED</b><div class="m">010 · $833.33</div><div class="t">Jul 01 06:00 · System</div></div></div>
+              <div class="tl"><div class="rail"><i style="background:var(--accent)"></i></div><div class="ev"><b>BENEFIT_ACTIVATED</b><div class="m">36-month schedule generated</div><div class="t">Feb 01 · Sam Rivera</div></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>Internal notes</h2><span class="meta">append-only</span></div>
+            <div class="note">
+              <div class="h"><span>Alex Operator · Operations</span><span class="num">Jul 11 09:15</span></div>
+              <p>Servicer reported intermittent timeouts this morning. Confirmed employment still active; scheduled retry for installment 011.</p>
+            </div>
+            <div class="note">
+              <div class="h"><span>Sam Rivera · Manager</span><span class="num">Feb 01 10:02</span></div>
+              <p>Benefit activated after verifying active employment and loan reference LN-203945.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PAYMENTS ================= -->
+    <section class="screen" id="screen-payments">
+      <div class="head"><div><h1>Payment operations queue</h1><div class="sub">Process, retry, and monitor employer contributions</div></div></div>
+      <div class="card">
+        <div class="tabs" id="payTabs">
+          <div class="tab" data-tab="scheduled">Scheduled <span class="cnt">142</span></div>
+          <div class="tab" data-tab="processing">Processing <span class="cnt">3</span></div>
+          <div class="tab active" data-tab="failed">Failed <span class="cnt">4</span></div>
+          <div class="tab" data-tab="retry">Retry pending <span class="cnt">3</span></div>
+          <div class="tab" data-tab="posted">Posted <span class="cnt">96</span></div>
+          <div class="tab" data-tab="canceled">Canceled <span class="cnt">12</span></div>
+        </div>
+        <div class="twrap">
+          <table class="tbl">
+            <thead><tr><th>Borrower</th><th>Employer</th><th>Scheduled</th><th class="r">Amount</th><th>Status</th><th class="r">Att.</th><th>Failure</th><th></th></tr></thead>
+            <tbody id="payBody"><!-- filled by JS --></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= EXCEPTIONS ================= -->
+    <section class="screen" id="screen-exceptions">
+      <div class="head"><div><h1>Exception workbench</h1><div class="sub">5 open · sorted by severity, then newest</div></div></div>
+      <div class="filters">
+        <select><option>Status: Open</option><option>In review</option><option>Resolved</option><option>Dismissed</option><option>All</option></select>
+        <select><option>Severity: All</option><option>Critical</option><option>High</option><option>Medium</option></select>
+        <select><option>Type: All</option><option>Payment failed</option><option>Servicer sync</option><option>Employment verification</option></select>
+        <span class="fchip">Assignee: Anyone</span>
+      </div>
+      <div class="card">
+        <div class="twrap">
+          <table class="tbl">
+            <thead><tr><th>Severity</th><th>Type</th><th>Borrower</th><th>Employer</th><th>Summary</th><th>Assigned</th><th>Created</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr>
+                <td><span class="sev sev--CRITICAL"><i></i><b>CRITICAL</b></span></td>
+                <td>Servicer sync failure</td><td>Dana Osei</td><td>Cedar Grove Schools</td>
+                <td>Nightly balance sync with Meridian failing</td>
+                <td class="rowsub">Unassigned</td><td class="num rowsub">Jul 11</td>
+                <td><span class="pill s-warn"><span class="dot"></span>Open</span></td>
+                <td><button class="btn" data-min-role="1" style="height:26px">Assign to me</button></td>
+              </tr>
+              <tr>
+                <td><span class="sev sev--HIGH"><i></i><b>HIGH</b></span></td>
+                <td>Payment failed</td><td>Jordan Lee</td><td>Memorial Health</td>
+                <td>Employer contribution failed · 011</td>
+                <td class="rowsub">Alex Operator</td><td class="num rowsub">Jul 11</td>
+                <td><span class="pill s-info"><span class="dot"></span>In review</span></td>
+                <td><button class="btn" data-min-role="1" style="height:26px">Resolve</button></td>
+              </tr>
+              <tr>
+                <td><span class="sev sev--HIGH"><i></i><b>HIGH</b></span></td>
+                <td>Payment failed</td><td>Tomas Alvarez</td><td>Northwind Logistics</td>
+                <td>Contribution declined by servicer</td>
+                <td class="rowsub">Unassigned</td><td class="num rowsub">Jul 10</td>
+                <td><span class="pill s-warn"><span class="dot"></span>Open</span></td>
+                <td><button class="btn" data-min-role="1" style="height:26px">Assign to me</button></td>
+              </tr>
+              <tr>
+                <td><span class="sev sev--MEDIUM"><i></i><b>MEDIUM</b></span></td>
+                <td>Employment verification</td><td>Marcus Bell</td><td>Northwind Logistics</td>
+                <td>Verify leave status before resuming</td>
+                <td class="rowsub">Sam Rivera</td><td class="num rowsub">Jul 09</td>
+                <td><span class="pill s-warn"><span class="dot"></span>Open</span></td>
+                <td><button class="btn" data-min-role="1" style="height:26px">Resolve</button></td>
+              </tr>
+              <tr>
+                <td><span class="sev sev--MEDIUM"><i></i><b>MEDIUM</b></span></td>
+                <td>Payment failed</td><td>Liam Walsh</td><td>Astra Manufacturing</td>
+                <td>Employer contribution failed <span class="chip-x">occurrence ×4</span></td>
+                <td class="rowsub">Unassigned</td><td class="num rowsub">Jul 08</td>
+                <td><span class="pill s-warn"><span class="dot"></span>Open</span></td>
+                <td><button class="btn" data-min-role="1" style="height:26px">Assign to me</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function(){
+  var root = document.documentElement;
+  var app = document.getElementById('app');
+
+  // ---- screen switching ----
+  function setScreen(name){
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+    var el = document.getElementById('screen-'+name);
+    if(el) el.classList.add('active');
+    document.querySelectorAll('.navitem').forEach(function(n){
+      n.classList.toggle('active', n.getAttribute('data-screen')===name);
+    });
+    var m = document.querySelector('main'); if(m) m.scrollTop = 0;
+  }
+  document.querySelectorAll('[data-screen]').forEach(function(n){
+    n.addEventListener('click', function(){ setScreen(n.getAttribute('data-screen')); });
+  });
+  document.querySelectorAll('[data-goto]').forEach(function(b){
+    b.addEventListener('click', function(){ setScreen(b.getAttribute('data-goto')); });
+  });
+  document.querySelectorAll('[data-open="detail"]').forEach(function(r){
+    r.addEventListener('click', function(){ setScreen('detail'); });
+  });
+
+  // ---- theme toggle ----
+  document.getElementById('themeBtn').addEventListener('click', function(){
+    var cur = root.getAttribute('data-theme');
+    if(!cur){ cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'; }
+    root.setAttribute('data-theme', cur==='dark' ? 'light':'dark');
+  });
+
+  // ---- role gating (demonstrates specs/12 permission matrix) ----
+  function applyRole(){
+    var rank = parseInt(document.getElementById('role').value,10);
+    document.querySelectorAll('[data-min-role]').forEach(function(b){
+      var need = parseInt(b.getAttribute('data-min-role'),10);
+      var locked = rank < need;
+      b.classList.toggle('is-locked', locked);
+      if(locked){ b.setAttribute('disabled','disabled'); b.setAttribute('title','Requires '+(need===2?'Servicing Manager':'Administrator')+' role'); }
+      else { b.removeAttribute('disabled'); b.removeAttribute('title'); }
+    });
+  }
+  document.getElementById('role').addEventListener('change', applyRole);
+
+  // ---- payment queue tabs ----
+  var pay = {
+    scheduled:[
+      ['Priya Nair','Memorial Health','Aug 1','$625.00','s-info','Scheduled','0','—'],
+      ['Sofia Ramos','Astra Manufacturing','Aug 1','$1,000.00','s-info','Scheduled','0','—'],
+      ['Dana Osei','Cedar Grove Schools','Aug 1','$833.33','s-info','Scheduled','0','—']
+    ],
+    processing:[
+      ['Sofia Ramos','Astra Manufacturing','Jul 11','$1,000.00','s-warn','Processing','1','in-flight'],
+      ['Priya Nair','Memorial Health','Jul 11','$625.00','s-warn','Processing','1','in-flight'],
+      ['Aisha Khan','Cedar Grove Schools','Jul 11','$416.67','s-warn','Processing','1','in-flight']
+    ],
+    failed:[
+      ['Tomas Alvarez','Northwind Logistics','Jul 3','$700.00','s-crit','Failed','2','INSUFFICIENT_FUNDS'],
+      ['Liam Walsh','Astra Manufacturing','Jul 5','$900.00','s-crit','Failed','4','SERVICER_UNAVAILABLE'],
+      ['Marcus Bell','Northwind Logistics','Jul 2','$500.00','s-crit','Failed','1','SERVICER_TIMEOUT'],
+      ['Elena Petrov','Astra Manufacturing','Jul 6','$1,000.00','s-crit','Failed','1','SERVICER_TIMEOUT']
+    ],
+    retry:[
+      ['Jordan Lee','Memorial Health','Jul 1','$833.33','s-serious','Retry pending','1','queued'],
+      ['Omar Diallo','Memorial Health','Jul 1','$625.00','s-serious','Retry pending','2','queued'],
+      ['Ravi Patel','Cedar Grove Schools','Jul 1','$416.67','s-serious','Retry pending','1','queued']
+    ],
+    posted:[
+      ['Dana Osei','Cedar Grove Schools','Jul 1','$833.33','s-good','Posted','1','—'],
+      ['Aisha Khan','Cedar Grove Schools','Jul 1','$416.67','s-good','Posted','1','—'],
+      ['Priya Nair','Memorial Health','Jul 1','$625.00','s-good','Posted','1','—']
+    ],
+    canceled:[
+      ['Wei Chen','Memorial Health','Aug 1','$750.00','s-neutral','Canceled','0','employment terminated'],
+      ['Wei Chen','Memorial Health','Sep 1','$750.00','s-neutral','Canceled','0','employment terminated']
+    ]
+  };
+  var mgr = 2; // process/retry actions gated at manager for process, ops for retry
+  function renderPay(tab){
+    var rows = pay[tab]||[];
+    var html = rows.map(function(r){
+      var action = tab==='failed'
+        ? '<button class="btn" data-min-role="1" style="height:26px">Retry</button>'
+        : (tab==='retry'||tab==='scheduled') ? '<button class="btn" data-min-role="2" style="height:26px">Process</button>' : '';
+      return '<tr><td class="who"><b>'+r[0]+'</b></td><td>'+r[1]+'</td><td class="num">'+r[2]+'</td>'+
+             '<td class="r money">'+r[3]+'</td><td><span class="pill '+r[4]+'"><span class="dot"></span>'+r[5]+'</span></td>'+
+             '<td class="r num">'+r[6]+'</td><td class="rowsub">'+r[7]+'</td><td>'+action+'</td></tr>';
+    }).join('');
+    document.getElementById('payBody').innerHTML = html || '<tr><td colspan="8" class="rowsub" style="padding:18px 12px">No contributions in this state.</td></tr>';
+    applyRole();
+  }
+  document.querySelectorAll('#payTabs .tab').forEach(function(t){
+    t.addEventListener('click', function(){
+      document.querySelectorAll('#payTabs .tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      renderPay(t.getAttribute('data-tab'));
+    });
+  });
+
+  renderPay('failed');
+  applyRole();
+})();
+</script>

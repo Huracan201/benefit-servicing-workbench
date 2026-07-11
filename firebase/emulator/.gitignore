@@ -1,0 +1,10 @@
+# Emulator state exports — regenerate via the seed script (specs/18-seed-and-demo.md)
+/data/
+
+# Emulator debug logs
+*-debug.log
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log

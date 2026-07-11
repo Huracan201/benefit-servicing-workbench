@@ -1,0 +1,141 @@
+name: CI
+
+# Runs the test gates from specs/17 §17.5. The always-on jobs (openapi-lint,
+# firestore-rules) exercise the artifacts that exist today; the backend / frontend /
+# e2e jobs auto-activate via `hashFiles(...)` guards once that code lands in Phase 1+,
+# so the pipeline stays green on the current (spec-only) repo.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DEMO_PROJECT: demo-benefitservicing-workbench
+
+jobs:
+  openapi-lint:
+    name: OpenAPI lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Lint specs/openapi.yaml (Spectral)
+        run: npx -y @stoplight/spectral-cli@^6 lint specs/openapi.yaml --fail-severity=error
+
+  firestore-rules:
+    name: Firestore security-rule tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17" # Firestore emulator is a Java process
+      - name: Install firebase-tools
+        run: npm i -g firebase-tools
+      - name: Install deps
+        working-directory: firebase
+        run: npm install
+      - name: Run rules tests against the Firestore emulator
+        working-directory: firebase
+        run: npm run test:rules:ci
+
+  backend:
+    name: Backend (unit + emulator integration)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('backend/manage.py') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install firebase-tools
+        run: npm i -g firebase-tools
+      - name: Install backend deps
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        working-directory: backend
+        run: python manage.py test --tag=unit
+      - name: Emulator integration tests (transactions, idempotency gate, reconciliation, rules)
+        run: >
+          firebase emulators:exec --project=${{ env.DEMO_PROJECT }}
+          --config firebase/firebase.json
+          "python backend/manage.py test --tag=emulator"
+
+  frontend:
+    name: Frontend (lint + unit + build)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('frontend/package.json') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Unit tests (Vitest + RTL)
+        working-directory: frontend
+        run: npm run test
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  e2e:
+    name: E2E (Playwright critical paths)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('frontend/package.json') != '' && hashFiles('backend/manage.py') != '' && hashFiles('infrastructure/scripts/e2e.sh') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install firebase-tools
+        run: npm i -g firebase-tools
+      - name: Install frontend deps + Playwright browser
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      # infrastructure/scripts/e2e.sh: seed the emulator, start Django + Next.js, run the
+      # critical-path specs (specs/17 §17.4), tear down. Added in Phase 5.
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+      - name: Critical-path E2E against the emulator
+        run: >
+          firebase emulators:exec --project=${{ env.DEMO_PROJECT }}
+          --config firebase/firebase.json
+          "bash infrastructure/scripts/e2e.sh"

@@ -1,0 +1,8 @@
+# Spectral ruleset for linting specs/openapi.yaml in CI (.github/workflows/ci.yml).
+# Uses the built-in OpenAPI ruleset; tune severities here if a warning is too noisy.
+extends: ["spectral:oas"]
+rules:
+  # We intentionally omit example servers' contact/license URLs in the demo spec.
+  info-contact: off
+  # Command endpoints are self-descriptive via summary; per-operation descriptions optional.
+  operation-description: off

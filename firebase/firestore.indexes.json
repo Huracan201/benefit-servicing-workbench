@@ -1,0 +1,427 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "loans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "borrowerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "loanStatus",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loanWorkbenches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "loanStatus",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loanWorkbenches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "benefitStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "loanStatus",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loanWorkbenches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "benefitStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextContributionDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loanWorkbenches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employmentStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "loanStatus",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "loanWorkbenches",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "openExceptionCount",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduledDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduledDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "benefitAgreementId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "installmentNumber",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "loanId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduledDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastAttemptAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "severityRank",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "assignedTo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "exceptionType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "loanId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "severityRank",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "borrowers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "employmentStatus",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "borrowers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employmentStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "displayName",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "benefitAgreements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "benefitAgreements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "endDate",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicingEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "entityType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "entityId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "sequence",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicingEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "correlationId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sequence",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicingEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "employerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "servicingEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "eventType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "sequence",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "idempotencyKeys",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "leaseExpiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "servicingEvents",
+      "fieldPath": "metadata",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "events",
+      "fieldPath": "metadata",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "operationalExceptions",
+      "fieldPath": "details",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "scheduledContributions",
+      "fieldPath": "failureReason",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "attempts",
+      "fieldPath": "failureReason",
+      "indexes": []
+    }
+  ]
+}
