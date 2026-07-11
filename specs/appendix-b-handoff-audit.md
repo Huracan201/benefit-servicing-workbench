@@ -17,7 +17,7 @@ Before handoff, the v2 package was audited by three independent review passes (a
 | Finding | Resolution | Where |
 |---|---|---|
 | Task/Scheduler handlers had **no inbound auth** (publicly invokable as SYSTEM) | `/internal/*` namespace + Google **OIDC** middleware (audience + invoker SA) + emulator bypass | [12 §12.5](./12-auth-and-security.md), [14](./14-async-and-background-jobs.md), [21 §21.2](./21-deployment-and-operations.md) |
-| CI: `emulators:exec` run from repo root without `--config` (fails on first Phase-1 PR); e2e job activates before its script exists | `--config firebase/firebase.json` on both; `e2e.sh` added to the hashFiles guard; backend deps installed in e2e | [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
+| CI: `emulators:exec` run from repo root without `--config` (fails on first Phase-1 PR); e2e job activates before its script exists | `--config firebase/firebase.json` on both; `e2e.sh` added to the job-activation guard; backend deps installed in e2e | [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
 | "Disable is immediate" false with plain `verify_id_token`; §12.4 claimed an unimplemented rules condition | `check_revoked=True` on mutating commands; §12.4 prose corrected (read revocation bounded by token expiry) | [12 §12.3–12.4](./12-auth-and-security.md) |
 | CORS unspecified; `Retry-After` invisible cross-origin (breaks 202 polling in browsers) | CORS policy + `Access-Control-Expose-Headers: Retry-After` + authorized-domains step | [21 §21.3](./21-deployment-and-operations.md) |
 | `requestHash` undefined for body-less commands (same key could replay across entities) | Hash = method + **path** + canonical body; FAILED-key overwrite re-checks hash | [08 §8.2](./08-idempotency-and-consistency.md) |

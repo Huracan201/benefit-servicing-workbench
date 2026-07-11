@@ -2,8 +2,9 @@ name: CI
 
 # Runs the test gates from specs/17 §17.5. The always-on jobs (openapi-lint,
 # firestore-rules) exercise the artifacts that exist today; the backend / frontend /
-# e2e jobs auto-activate via `hashFiles(...)` guards once that code lands in Phase 1+,
-# so the pipeline stays green on the current (spec-only) repo.
+# e2e jobs auto-activate via the `detect` job's file-existence outputs once that code
+# lands in Phase 1+ (hashFiles() is step-scope only — it cannot be used in job-level
+# `if:`), so the pipeline stays green on the current (spec-only) repo.
 
 on:
   push:
@@ -21,6 +22,26 @@ env:
   DEMO_PROJECT: demo-benefitservicing-workbench
 
 jobs:
+  detect:
+    name: Detect present components
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.check.outputs.backend }}
+      frontend: ${{ steps.check.outputs.frontend }}
+      e2e: ${{ steps.check.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          backend=$([ -f backend/manage.py ] && echo true || echo false)
+          frontend=$([ -f frontend/package.json ] && echo true || echo false)
+          e2e=$([ "$backend" = true ] && [ "$frontend" = true ] && [ -f infrastructure/scripts/e2e.sh ] && echo true || echo false)
+          {
+            echo "backend=$backend"
+            echo "frontend=$frontend"
+            echo "e2e=$e2e"
+          } >> "$GITHUB_OUTPUT"
+
   openapi-lint:
     name: OpenAPI lint
     runs-on: ubuntu-latest
@@ -56,7 +77,8 @@ jobs:
   backend:
     name: Backend (unit + emulator integration)
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('backend/manage.py') != '' }}
+    needs: detect
+    if: ${{ needs.detect.outputs.backend == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -86,7 +108,8 @@ jobs:
   frontend:
     name: Frontend (lint + unit + build)
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('frontend/package.json') != '' }}
+    needs: detect
+    if: ${{ needs.detect.outputs.frontend == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -110,7 +133,8 @@ jobs:
   e2e:
     name: E2E (Playwright critical paths)
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('frontend/package.json') != '' && hashFiles('backend/manage.py') != '' && hashFiles('infrastructure/scripts/e2e.sh') != '' }}
+    needs: detect
+    if: ${{ needs.detect.outputs.e2e == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -35,7 +35,7 @@ npx @stoplight/spectral-cli lint specs/openapi.yaml --fail-severity=error
 - `firebase.json` lives **inside `firebase/`** (not the repo root) — run `firebase` from that directory or pass `--config firebase/firebase.json`.
 - Rules and indexes are the **source of truth**; never edit them in the Firebase console. Deploy with `firebase deploy --only firestore:rules,firestore:indexes`.
 
-**Once app code lands** (per specs/19 & specs/02 §2.5): backend is Django (`python manage.py test --tag=unit|emulator`, Cloud Run); frontend is Next.js (`npm run dev|build|test`, Vitest + Playwright). The CI (`ci.yml`) already defines these jobs, guarded by `hashFiles(...)` so they activate automatically when the directories appear.
+**Once app code lands** (per specs/19 & specs/02 §2.5): backend is Django (`python manage.py test --tag=unit|emulator`, Cloud Run); frontend is Next.js (`npm run dev|build|test`, Vitest + Playwright). The CI (`ci.yml`) already defines these jobs, gated on a file-existence `detect` job so they activate automatically when the directories appear.
 
 ## Architecture (the load-bearing ideas)
 
