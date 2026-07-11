@@ -1,0 +1,25 @@
+# Backend runtime dependencies. Pinned with conservative specifiers that
+# resolve clean on Python 3.12. Firestore is the datastore (no DB drivers).
+
+# Web framework + API
+Django>=5.2,<5.3
+djangorestframework>=3.16,<3.17
+django-cors-headers>=4.3,<5.0
+
+# Firebase / GCP — token verification, Firestore writes, async tasks, OIDC
+firebase-admin>=6.5,<7.0
+google-cloud-firestore>=2.16,<3.0
+google-cloud-tasks>=2.16,<3.0
+google-auth>=2.29,<3.0
+# Explicit PyJWT floor — firebase-admin only requires >=2.5.0; pin up to avoid
+# resolving an old, vulnerable release.
+pyjwt[crypto]>=2.13,<3.0
+
+# Date / period math (SYSTEM_TIMEZONE calendar helpers)
+python-dateutil>=2.9,<3.0
+# IANA tz database so ZoneInfo(SYSTEM_TIMEZONE) resolves on slim images lacking
+# system /usr/share/zoneinfo (data-only package, no framework).
+tzdata>=2024.1
+
+# WSGI server (Cloud Run)
+gunicorn>=22.0,<23.0

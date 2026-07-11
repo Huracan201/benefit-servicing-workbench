@@ -2,7 +2,7 @@
 
 An operations platform for servicing **employer-sponsored student-loan repayment benefits**: benefit activation, employer-funded contribution schedules, simulated payment processing with real transactional/idempotency/recovery controls, employment-change cascades, exception handling, and an immutable audit timeline. Firestore is the primary system of record; a Django command backend owns every write; a Next.js workbench subscribes read-only in real time.
 
-**Status: specification & design package — the application is not built yet.** `frontend/`, `backend/`, and `infrastructure/` are the planned layout ([specs/02](specs/02-architecture.md) §2.5); implementation follows the phases in [specs/19](specs/19-delivery-and-scope.md).
+**Status: Phase 1 foundation scaffolded.** `backend/` (lean Django + DRF, Firestore-only) and `frontend/` (Next.js App Router) exist; the safety-critical, framework-free `backend/common/` core (money/state-machines/invariants) has **57 passing unit tests**. Business commands, async workers, and real screens are Phase 2+ per [specs/19](specs/19-delivery-and-scope.md).
 
 ## Start here
 
@@ -33,4 +33,4 @@ CI (`.github/workflows/ci.yml`) runs the OpenAPI lint + rules tests now; backend
 
 ## Planned artifacts (not yet present)
 
-`backend/` (Django + DRF on Cloud Run), `frontend/` (Next.js), `infrastructure/` (queues, scheduler, deploy scripts incl. `scripts/e2e.sh`), `docs/demo-script.md`, `docker-compose.yml`.
+`infrastructure/` (queue/scheduler IaC + `scripts/e2e.sh`), `docs/demo-script.md`, and the Phase 2+ backend command/task layer and Phase 4 UI screens. `docker-compose.yml` and the `backend/`+`frontend/` scaffolds now exist.

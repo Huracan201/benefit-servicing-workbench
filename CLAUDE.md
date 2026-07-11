@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-This is the **specification and design handoff package** for the **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **The application is not built yet.** There is no `frontend/`, `backend/`, or `infrastructure/` directory; the specs reference them as the intended layout ([specs/02 §2.5](specs/02-architecture.md)) for Phase 1+ implementation.
+This is the spec-driven **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **Phase 1 foundation is scaffolded** (specs/19); business logic (commands, tasks, screens) is Phase 2+ and largely not built yet.
 
 What exists today:
-- `specs/` — 22 numbered spec docs + `openapi.yaml` (the API contract) + `wireframes.html` (interactive UI mockup). Start at [`specs/README.md`](specs/README.md) — it is the index, the reading order, and the normative global conventions.
-- `firebase/` — deployable Firestore security rules, composite indexes, emulator config, and a runnable **security-rules test suite** (TypeScript/Vitest).
-- `.github/workflows/ci.yml` + `.spectral.yaml` — CI gates (mostly dormant until app code lands).
+- `specs/` — 22 numbered spec docs + `21-deployment-and-operations.md` + `openapi.yaml` (the authoritative API contract) + `wireframes.html`. Start at [`specs/README.md`](specs/README.md) — the index, reading order, and normative global conventions. `appendix-a` (v1→v2) and `appendix-b` (v2→v2.1 audit) trace the review history.
+- `firebase/` — deployable Firestore rules + indexes, emulator config, and a **passing** security-rules test suite (TS/Vitest, 12 tests).
+- `backend/` — **Phase 1 Django scaffold.** Lean DRF project (`config/`), Firestore-only (no ORM). The safety-critical, **framework-free** core is `backend/common/` (money/residual solver, periods, deterministic ids, state machines, invariants, enums) with **57 passing stdlib unit tests**. `firebase_auth/` (token auth + role perms + `/internal` OIDC middleware + `set_role`), `core/` (health/readiness, correlation-id + JSON logging, `schema.py` doc TypedDicts). Business command/task endpoints are **not** built yet (reserved `/api/v1`, `/internal` in `config/urls.py`).
+- `frontend/` — **Phase 1 Next.js scaffold** (App Router + TS + Tailwind): emulator-aware Firebase client, `useDocument`/`useCollectionPage` hooks, typed enums mirroring the backend, app shell + stub screens + one smoke test. Screens are stubs (Phase 4).
+- `.github/workflows/ci.yml` + `.spectral.yaml` — CI: a `detect` job gates the backend/frontend/e2e jobs on file presence; backend + frontend are now **active**.
 
-When asked to "build," "run the app," or "run the tests," remember most of that surface does not exist yet — the runnable pieces are only the rules tests and the OpenAPI lint (below). Scaffolding the app is the work of [specs/19](specs/19-delivery-and-scope.md) Phase 1.
+Phase 1 is foundation only — do not expect runnable business workflows yet. Next work is [specs/19](specs/19-delivery-and-scope.md) Phase 2 (domain commands).
 
 ## Commands that work today
 
@@ -29,7 +31,12 @@ cd firebase && firebase emulators:start --project=demo-benefitservicing-workbenc
 
 # Lint the API contract (run from repo root; uses .spectral.yaml → spectral:oas)
 npx @stoplight/spectral-cli lint specs/openapi.yaml --fail-severity=error
+
+# Backend safety-critical core tests (framework-free — no pip install needed)
+cd backend && python -m unittest discover -s common/tests -p 'test_*.py' -t .
 ```
+
+The `common/` core is deliberately dependency-free so it runs offline; the rest of the backend (`python manage.py check`) and the frontend (`next build`) need `pip install -r backend/requirements.txt` / `npm install` and are verified on CI.
 
 - The emulator/tests use the **`demo-`-prefixed project id** so they run fully offline with no GCP credentials. See [`firebase/emulator/README.md`](firebase/emulator/README.md).
 - `firebase.json` lives **inside `firebase/`** (not the repo root) — run `firebase` from that directory or pass `--config firebase/firebase.json`.

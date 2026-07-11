@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cool-slate neutral palette + single teal accent (specs/15 §15.1). RGB channel
+   triplets so Tailwind's `<alpha-value>` works. Light + dark are both first-class. */
+:root {
+  --surface: 248 250 252; /* slate-50 */
+  --surface-muted: 241 245 249; /* slate-100 */
+  --surface-raised: 255 255 255;
+  --border: 226 232 240; /* slate-200 */
+  --content: 15 23 42; /* slate-900 */
+  --content-muted: 71 85 105; /* slate-600 */
+  --accent: 13 148 136; /* teal-600 */
+  --accent-fg: 255 255 255;
+}
+
+.dark {
+  --surface: 2 6 23; /* slate-950 */
+  --surface-muted: 15 23 42; /* slate-900 */
+  --surface-raised: 15 23 42; /* slate-900 */
+  --border: 30 41 59; /* slate-800 */
+  --content: 226 232 240; /* slate-200 */
+  --content-muted: 148 163 184; /* slate-400 */
+  --accent: 45 212 191; /* teal-400 */
+  --accent-fg: 2 6 23;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --surface: 2 6 23;
+    --surface-muted: 15 23 42;
+    --surface-raised: 15 23 42;
+    --border: 30 41 59;
+    --content: 226 232 240;
+    --content-muted: 148 163 184;
+    --accent: 45 212 191;
+    --accent-fg: 2 6 23;
+  }
+}
+
+body {
+  color: rgb(var(--content));
+  background: rgb(var(--surface));
+  font-variant-numeric: tabular-nums;
+}

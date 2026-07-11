@@ -1,0 +1,72 @@
+# Dev-oriented local stack for the BenefitServicing Workbench.
+#
+#   firebase   - Firebase Emulator Suite (Auth :9099, Firestore :8080, UI :4000)
+#   backend    - Django API (Cloud Run surface), :8000
+#   frontend   - Next.js app (read-only Firestore client), :3000
+#
+# This mirrors the `local` column of the specs/21 §21.3 config matrix. It is for
+# development only — production runs on Cloud Run + Vercel, not compose.
+#
+# Bring up:  docker compose up
+# The emulator image bundles firebase-tools + JDK; backend/frontend wait for it.
+
+services:
+  firebase:
+    image: node:20-bookworm
+    working_dir: /workspace/firebase
+    command: >
+      bash -c "apt-get update && apt-get install -y default-jre-headless &&
+      npm i -g firebase-tools &&
+      firebase emulators:start --project=$${GOOGLE_CLOUD_PROJECT}
+      --config firebase.json --only auth,firestore"
+    environment:
+      GOOGLE_CLOUD_PROJECT: demo-benefitservicing-workbench
+    volumes:
+      - ./firebase:/workspace/firebase
+    ports:
+      - "9099:9099" # Auth emulator
+      - "8080:8080" # Firestore emulator
+      - "4000:4000" # Emulator UI
+    # Emulators must bind 0.0.0.0 to be reachable from sibling containers.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  backend:
+    image: python:3.12-slim
+    working_dir: /workspace/backend
+    command: >
+      bash -c "pip install -r requirements.txt &&
+      python manage.py migrate --run-syncdb --noinput || true &&
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --reload"
+    environment:
+      FIRESTORE_EMULATOR_HOST: firebase:8080
+      FIREBASE_AUTH_EMULATOR_HOST: firebase:9099
+      GOOGLE_CLOUD_PROJECT: demo-benefitservicing-workbench
+      DJANGO_SECRET_KEY: dev-insecure-secret-key-change-me-in-production
+      DEBUG: "1"
+      ALLOWED_HOSTS: "*"
+      SYSTEM_TIMEZONE: America/New_York
+      TASK_EXECUTION_MODE: inline
+      INTERNAL_DEV_SECRET: dev-internal-secret
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+    volumes:
+      - ./backend:/workspace/backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - firebase
+
+  frontend:
+    image: node:20-bookworm
+    working_dir: /workspace/frontend
+    command: bash -c "npm install && npm run dev"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_USE_FIREBASE_EMULATOR: "true"
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-benefitservicing-workbench
+    volumes:
+      - ./frontend:/workspace/frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
