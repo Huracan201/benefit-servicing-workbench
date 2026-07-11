@@ -127,6 +127,10 @@ export function useCollectionPage<T>(
     );
 
     return unsubscribe;
+    // NOTE: each page keeps its own live onSnapshot listener, so a document that
+    // changes sort position can shift between adjacent pages (transient dup/gap).
+    // This real-time + cursor design is what specs/05 §5.6 mandates; a screen that
+    // needs strictly stable pagination should swap this for a one-shot getDocs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 

@@ -62,11 +62,16 @@ def initialize_app():
             options["projectId"] = project_id
 
         if os.environ.get("FIREBASE_AUTH_EMULATOR_HOST"):
-            # Talking to the Auth emulator: no real credentials, anonymous creds.
+            # Auth emulator: no real credentials. firebase_admin.credentials has no
+            # AnonymousCredentials, so wrap google.auth's in a credentials.Base subclass.
             from firebase_admin import credentials
+            from google.auth.credentials import AnonymousCredentials
 
-            cred = credentials.AnonymousCredentials()
-            _APP = firebase_admin.initialize_app(cred, options or None)
+            class _EmulatorCredential(credentials.Base):
+                def get_credential(self):
+                    return AnonymousCredentials()
+
+            _APP = firebase_admin.initialize_app(_EmulatorCredential(), options or None)
         else:
             # Production/Cloud Run: Application Default Credentials.
             _APP = firebase_admin.initialize_app(options=options or None)

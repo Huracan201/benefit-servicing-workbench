@@ -77,6 +77,7 @@ class Command(BaseCommand):
 
         user_ref = client.collection("users").document(uid)
         snapshot = user_ref.get()
+        batch = client.batch()  # mirror + audit event commit atomically
         base = {
             "uid": uid,
             "email": user.email or email,
@@ -90,15 +91,16 @@ class Command(BaseCommand):
         if snapshot.exists:
             existing = snapshot.to_dict() or {}
             base["revision"] = int(existing.get("revision", 0)) + 1
-            user_ref.set(base, merge=True)
+            batch.set(user_ref, base, merge=True)
         else:
             base["createdAt"] = server_ts
             base["createdBy"] = actor_id
             base["revision"] = 1
-            user_ref.set(base)
+            batch.set(user_ref, base)
 
         event_ref = client.collection("servicingEvents").document()
-        event_ref.set(
+        batch.set(
+            event_ref,
             {
                 "eventType": "USER_ROLE_CHANGED",
                 "entityType": "USER",
@@ -119,8 +121,9 @@ class Command(BaseCommand):
                     "targetEmail": user.email or email,
                 },
                 "createdAt": server_ts,
-            }
+            },
         )
+        batch.commit()
 
         self.stdout.write(
             self.style.SUCCESS(
