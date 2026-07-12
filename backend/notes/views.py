@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commands.base import (
+    MAX_FREETEXT_LEN,
     CommandContext,
     CommandError,
     OperationInProgress,
@@ -60,6 +61,12 @@ class AddNoteView(APIView):
             err = ValidationError(
                 "note text is required and must be non-empty",
                 code="NOTE_TEXT_REQUIRED",
+            )
+            return Response(err.to_body(correlation_id), status=err.http_status)
+        if len(text) > MAX_FREETEXT_LEN:
+            err = ValidationError(
+                f"note text must be at most {MAX_FREETEXT_LEN} characters",
+                code="NOTE_TEXT_TOO_LONG",
             )
             return Response(err.to_body(correlation_id), status=err.http_status)
 

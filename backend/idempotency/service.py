@@ -41,6 +41,12 @@ from common.enums import IdempotencyStatus
 # ---------------------------------------------------------------------------
 IDEMPOTENCY_COLLECTION = "idempotencyKeys"
 RETENTION_DAYS = 30  # expiresAt = completedAt + 30 days (specs/21 §21.1)
+# A PENDING record is stamped with a far-future expiresAt so an orphaned key
+# from a driver that crashed and is never retried stays eligible for Firestore
+# TTL deletion — bounding unbounded PENDING growth even before the Phase-3
+# reap-expired-leases job runs. complete()/fail() overwrite it with the
+# RETENTION_DAYS window once the outcome is known.
+PENDING_TTL_DAYS = 7
 
 
 class BeginState(StrEnum):
@@ -288,7 +294,7 @@ def _write_pending(
         "leaseExpiresAt": lease_expires,
         "result": None,
         "completedAt": None,
-        "expiresAt": None,
+        "expiresAt": _now() + timedelta(days=PENDING_TTL_DAYS),
         "updatedAt": firestore.SERVER_TIMESTAMP,
     }
     if overwrite:

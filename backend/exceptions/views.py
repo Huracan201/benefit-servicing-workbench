@@ -27,6 +27,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commands.base import (
+    MAX_FREETEXT_LEN,
+    MAX_IDENTIFIER_LEN,
+    MAX_SHORTTEXT_LEN,
     CommandContext,
     CommandError,
     OperationInProgress,
@@ -86,8 +89,14 @@ def _error_response(exc: CommandError, correlation_id) -> Response:
     return Response(exc.to_body(correlation_id), status=exc.http_status)
 
 
-def _str_field(body: dict, name: str, *, required: bool) -> Optional[str]:
-    """Extract a required/optional non-empty string field, or raise 400."""
+def _str_field(
+    body: dict, name: str, *, required: bool, max_len: int = MAX_SHORTTEXT_LEN
+) -> Optional[str]:
+    """Extract a required/optional non-empty string field, or raise 400.
+
+    ``max_len`` bounds the accepted length (DoS guard, specs/06 §6.4): an
+    over-long value is a 400, never a persisted unbounded document.
+    """
     value = body.get(name)
     if value is None or (isinstance(value, str) and not value.strip()):
         if required:
@@ -95,6 +104,8 @@ def _str_field(body: dict, name: str, *, required: bool) -> Optional[str]:
         return None
     if not isinstance(value, str):
         raise ValidationError(f"{name} must be a string")
+    if len(value) > max_len:
+        raise ValidationError(f"{name} must be at most {max_len} characters")
     return value
 
 
@@ -111,11 +122,19 @@ class CreateExceptionView(APIView):
 
         body = request.data if isinstance(request.data, dict) else {}
         try:
-            exception_type = _str_field(body, "exceptionType", required=True)
-            entity_type = _str_field(body, "entityType", required=True)
-            entity_id = _str_field(body, "entityId", required=True)
+            exception_type = _str_field(
+                body, "exceptionType", required=True, max_len=MAX_IDENTIFIER_LEN
+            )
+            entity_type = _str_field(
+                body, "entityType", required=True, max_len=MAX_IDENTIFIER_LEN
+            )
+            entity_id = _str_field(
+                body, "entityId", required=True, max_len=MAX_IDENTIFIER_LEN
+            )
             summary = _str_field(body, "summary", required=True)
-            details = _str_field(body, "details", required=False)
+            details = _str_field(
+                body, "details", required=False, max_len=MAX_FREETEXT_LEN
+            )
             # Validate the enums up-front so a bad value is a 400, not a 500.
             try:
                 ExceptionType(exception_type)
@@ -218,6 +237,11 @@ class ResolveExceptionView(APIView):
         note = body.get("note")
         if note is not None and not isinstance(note, str):
             err_v = ValidationError("note must be a string")
+            return Response(err_v.to_body(correlation_id), status=err_v.http_status)
+        if isinstance(note, str) and len(note) > MAX_SHORTTEXT_LEN:
+            err_v = ValidationError(
+                f"note must be at most {MAX_SHORTTEXT_LEN} characters"
+            )
             return Response(err_v.to_body(correlation_id), status=err_v.http_status)
 
         ctx = _build_ctx(request, idempotency_key, correlation_id, body)
