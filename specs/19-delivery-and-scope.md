@@ -21,9 +21,11 @@ Real payment processing, ACH, production PII, credit underwriting, loan originat
 
 **Phase 3 — Async workflows.** Cloud Tasks; **Cloud Scheduler**; schedule-generation task; process-contribution task; **reconciliation sweeper**; cancel-future-contributions; projection updates; retry-safe/idempotent handlers + **dead-letter** routing.
 
+> **Phase 3 security prerequisites** (deferred from the [Phase 1+2 security review](./engineering-reports/security-review-phase-1-2.md) §7 so they land *with* the code that makes them reachable): verify OIDC + add a **command-level role re-check** on the `/internal` handlers wired here; **rate-limit** the mutating command endpoints (DRF `ScopedRateThrottle`); **paginate `contributions.due()`** (cursor + limit) so the scheduler enqueue job never runs an unbounded scan; **validate `entityId`/`entityType`** on manual-exception creation; and **revoke refresh tokens on role demotion** (`auth.revoke_refresh_tokens`). The remaining defense-in-depth items (security response headers, frontend lockfile + `npm ci`, stop trusting the inbound correlation id) fold into Phase 5 hardening.
+
 **Phase 4 — Workbench UI.** Dashboard; loan portfolio; loan detail; payment queue; exception workbench; **paginated** real-time subscriptions; role-based actions; loading/empty/error states.
 
-**Phase 5 — Testing & hardening.** Backend unit; emulator integration (**concurrency + reconciliation + security-rule** gates); frontend; Playwright critical paths A & B; structured logging + metrics; health checks; authorization-boundary review.
+**Phase 5 — Testing & hardening.** Backend unit; emulator integration (**concurrency + reconciliation + security-rule** gates); frontend; Playwright critical paths A & B; structured logging + metrics; health checks; authorization-boundary review; **defense-in-depth from the [Phase 1+2 security review](./engineering-reports/security-review-phase-1-2.md)** (security response headers, frontend lockfile + `npm ci`, correlation-id trust).
 
 **Phase 6 — Deployment & docs.** Backend → Cloud Run; frontend → Vercel/Firebase Hosting; production Firestore (indexes + rules from source); Cloud Tasks + Scheduler; monitoring/alerts; README; architecture diagrams; screenshots; 2-minute demo.
 

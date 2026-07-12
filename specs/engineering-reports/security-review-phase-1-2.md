@@ -3,7 +3,7 @@
 **Project:** BenefitServicing Workbench (`Huracan201/benefit-servicing-workbench`)
 **Scope reviewed:** all merged Phase 1 (foundation) + Phase 2 (command layer, parts 1 & 2) — `main` `abf3d33`
 **Type:** read-only adversarial security audit + quick-win remediation
-**Status:** ✅ Review complete · 🔧 remediation applied on `security/phase-1-2-hardening` (pending QA-verify → CI → merge)
+**Status:** ✅ Review complete · ✅ remediation merged — `main` `bda195b` (PR #4); deferred items folded into Phase-3 scope ([specs/19 §19.2](../19-delivery-and-scope.md))
 **Date:** 2026-07-12
 
 ---
@@ -97,7 +97,7 @@ The offline sandbox can only `py_compile`; the authoritative run is the CI emula
 
 ## 7. Deferred (tracked, not fixed here)
 
-Intentionally out of this quick-win change — most are Phase-3 prerequisites that should land **with** the code that makes them reachable:
+Intentionally out of this quick-win change — most are Phase-3 prerequisites that should land **with** the code that makes them reachable. These are now tracked as **Phase-3 scope** in [specs/19 §19.2](../19-delivery-and-scope.md):
 
 - **#6 revocation-on-demotion** — call `auth.revoke_refresh_tokens(uid)` in `set_user_role`.
 - **#8 rate limiting** — DRF `ScopedRateThrottle` on the command endpoints.
@@ -120,7 +120,7 @@ Intentionally out of this quick-win change — most are Phase-3 prerequisites th
 
 ## 9. What's next
 
-QA-verify these fixes (adversarial pass over the guardrail / handler / bounds / TTL) → commit → CI (the real emulator run under the new defaults) → CodeRabbit → merge. Then fold the **deferred** items into the Phase-3 work as the async handlers and projections land, where they become both reachable and testable.
+Merged as **PR #4** (`main` `bda195b`) after two green CI runs (real emulator suite under the new defaults) and a clean CodeRabbit pass — including a follow-up that extends the boot guardrail to also reject the leftover dev `ALLOWED_HOSTS` default. The **deferred** items are now folded into **Phase-3 scope** ([specs/19 §19.2](../19-delivery-and-scope.md)), to land with the async handlers and projections where they become both reachable and testable.
 
 ---
 
