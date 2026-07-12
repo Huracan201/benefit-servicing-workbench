@@ -62,10 +62,18 @@ def _error_response(exc: CommandError, correlation_id) -> Response:
 
 
 def _dispatch(request, contribution_id, command) -> Response:
-    correlation_id = request.headers.get(CORRELATION_HEADER) or uuid.uuid4().hex
+    # Reuse the id CorrelationIdMiddleware already resolved (honouring an inbound
+    # X-Correlation-Id or minting one); only fall back if middleware is absent.
+    correlation_id = (
+        getattr(request, "correlation_id", None)
+        or request.headers.get(CORRELATION_HEADER)
+        or uuid.uuid4().hex
+    )
 
     idempotency_key = request.headers.get(IDEMPOTENCY_HEADER)
-    if not idempotency_key:
+    # Missing OR whitespace-only is a 400; validate on a stripped copy but pass
+    # the RAW header value through so the stored idempotency key == the client's.
+    if not idempotency_key or not idempotency_key.strip():
         return _error_response(
             ValidationError(
                 "Idempotency-Key header is required",

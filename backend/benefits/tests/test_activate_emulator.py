@@ -179,7 +179,11 @@ class ActivateBenefitTests(SimpleTestCase):
     def test_activation_generates_schedule_and_activates(self):
         client = get_client()
         key = f"act_{uuid.uuid4().hex[:10]}"
-        ids = _seed_pending_agreement(client, key, total_commitment_cents=600_000, term_months=6)
+        # Non-divisible on purpose (1_000_000 / 12): base 83_333, final 83_337 —
+        # so the residual installment is actually exercised (specs/07 §7.3, I5).
+        ids = _seed_pending_agreement(
+            client, key, total_commitment_cents=1_000_000, term_months=12
+        )
         agreement_id = ids["agreement_id"]
 
         result = activate_benefit(agreement_id=agreement_id, ctx=_ctx(agreement_id), client=client)
@@ -187,27 +191,37 @@ class ActivateBenefitTests(SimpleTestCase):
         # --- command result -----------------------------------------------
         self.assertEqual(result["status"], str(BenefitStatus.ACTIVE))
         self.assertTrue(result["acceptingPayments"])
-        self.assertEqual(result["installmentsGenerated"], 6)
+        self.assertEqual(result["installmentsGenerated"], 12)
 
         # --- agreement ACTIVE + acceptingPayments -------------------------
         agreement = agreements.get(client, agreement_id)
         self.assertEqual(agreement["status"], str(BenefitStatus.ACTIVE))
         self.assertTrue(agreement["acceptingPayments"])
         self.assertTrue(agreement["scheduleGenerated"])
-        self.assertEqual(agreement["installmentsGenerated"], 6)
+        self.assertEqual(agreement["installmentsGenerated"], 12)
 
         # --- schedule generated: exactly `term` contributions -------------
         schedule = contributions.list_for_agreement(client, agreement_id)
-        self.assertEqual(len(schedule), 6)
+        self.assertEqual(len(schedule), 12)
 
         # --- Σ(scheduledAmountCents) == totalCommitment (invariant I5) -----
-        self.assertEqual(sum(c["scheduledAmountCents"] for c in schedule), 600_000)
+        amounts = [c["scheduledAmountCents"] for c in schedule]
+        self.assertEqual(sum(amounts), 1_000_000)
+        # Residual lands on the FINAL installment: installments 1..11 are the
+        # base; the last carries the remainder (specs/07 §7.3). This is the case
+        # the divisible 600_000/6 seed never exercised.
+        base = 1_000_000 // 12  # 83_333
+        self.assertEqual(amounts[:-1], [base] * 11)
+        self.assertEqual(amounts[-1], base + (1_000_000 - base * 12))  # 83_337
+        self.assertNotEqual(
+            amounts[-1], base, "final installment must carry the residual"
+        )
 
         # --- deterministic ids: {agreementId}__{NNN}, contiguous 1..term ---
-        expected_ids = [_contribution_id(agreement_id, n) for n in range(1, 7)]
+        expected_ids = [_contribution_id(agreement_id, n) for n in range(1, 13)]
         self.assertEqual([c["id"] for c in schedule], expected_ids)
         self.assertEqual(
-            [c["installmentNumber"] for c in schedule], list(range(1, 7))
+            [c["installmentNumber"] for c in schedule], list(range(1, 13))
         )
 
         # --- loan look-ahead synced ---------------------------------------

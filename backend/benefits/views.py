@@ -40,8 +40,10 @@ class ActivateBenefitView(APIView):
     def post(self, request: Request, agreement_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
 
-        idempotency_key = request.headers.get("Idempotency-Key", "").strip()
-        if not idempotency_key:
+        idempotency_key = request.headers.get("Idempotency-Key", "")
+        # Missing OR whitespace-only is a 400; validate on a stripped copy but
+        # pass the RAW header value through so the stored key == the client's.
+        if not idempotency_key.strip():
             # specs/11 §11.2 — missing key on a mutating command is a 400.
             err = ValidationError(
                 "Idempotency-Key header is required",

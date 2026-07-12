@@ -241,13 +241,25 @@ def _handle_indeterminate(
     contribution_id = contribution.get("id") or contribution.get("contributionId")
 
     def _run(txn):
+        # -- reads (all before any write — Firestore ordering rule) ---------
+        # Re-read the contribution IN-TXN. The outer ``contribution`` is a
+        # pre-transaction snapshot and may be stale: a concurrent finalize or a
+        # prior escalation could have moved ``currentExceptionId``. The
+        # already-counted / openExceptionCount decisions below must key off the
+        # fresh in-txn state, not the param. Fall back to the snapshot if the
+        # in-txn read comes back empty.
+        fresh = service._get_in_txn(txn, contributions.ref(client, contribution_id))
+        if fresh is None:
+            fresh = contribution
+        loan_id = fresh.get("loanId")
+
         attempt = service._get_in_txn(
             txn, attempts.ref(client, contribution_id, attempt_number)
         )
         if attempt is None or attempt.get("status") != str(PaymentAttemptStatus.STARTED):
             return {
                 "contributionId": contribution_id,
-                "status": contribution.get("status"),
+                "status": fresh.get("status"),
                 "reconciled": False,
                 "indeterminate": True,
                 "reason": "attempt no longer STARTED",
@@ -258,7 +270,11 @@ def _handle_indeterminate(
         loan = None
         if escalate:
             # Read the loan (before writes) so we can bump openExceptionCount.
-            loan = service._get_in_txn(txn, loans.ref(client, contribution["loanId"]))
+            loan = (
+                service._get_in_txn(txn, loans.ref(client, loan_id))
+                if loan_id
+                else None
+            )
             exc_id = exceptions_service.upsert(
                 txn,
                 client,
@@ -267,11 +283,11 @@ def _handle_indeterminate(
                 entity_id=contribution_id,
                 summary=f"Payment stuck PROCESSING for {contribution_id} after {new_count} sweeps",
                 details=f"get_status indeterminate: {error}",
-                loan_id=contribution.get("loanId"),
-                borrower_id=contribution.get("borrowerId"),
-                borrower_name=contribution.get("borrowerName"),
-                employer_id=contribution.get("employerId"),
-                employer_name=contribution.get("employerName"),
+                loan_id=loan_id,
+                borrower_id=fresh.get("borrowerId"),
+                borrower_name=fresh.get("borrowerName"),
+                employer_id=fresh.get("employerId"),
+                employer_name=fresh.get("employerName"),
             )
 
         # Bump the sweep counter (only write on the attempt for the common case).
@@ -289,7 +305,7 @@ def _handle_indeterminate(
             # upsert only bumps occurrenceCount then). Counting it as already-open
             # whenever *any* currentExceptionId was set (the old bug) orphaned the
             # still-OPEN PAYMENT_FAILED and undercounted (2 open, count said 1).
-            already_counted = contribution.get("currentExceptionId") == exc_id
+            already_counted = fresh.get("currentExceptionId") == exc_id
             # Point at the stuck exception (most actionable); the prior
             # PAYMENT_FAILED row stays OPEN and is still reflected in the count.
             contrib_update = {"currentExceptionId": exc_id}
@@ -300,7 +316,7 @@ def _handle_indeterminate(
                     "openExceptionCount": int(loan.get("openExceptionCount", 0)) + 1
                 }
                 stamp_update(loan_update, ctx.actor_id)
-                txn.update(loans.ref(client, contribution["loanId"]), loan_update)
+                txn.update(loans.ref(client, loan_id), loan_update)
 
         events.append(
             txn,
@@ -318,10 +334,10 @@ def _handle_indeterminate(
                 "escalated": escalate,
                 "attemptNumber": attempt_number,
             },
-            loan_id=contribution.get("loanId"),
-            borrower_id=contribution.get("borrowerId"),
-            employer_id=contribution.get("employerId"),
-            benefit_agreement_id=contribution.get("benefitAgreementId"),
+            loan_id=loan_id,
+            borrower_id=fresh.get("borrowerId"),
+            employer_id=fresh.get("employerId"),
+            benefit_agreement_id=fresh.get("benefitAgreementId"),
         )
 
         return {

@@ -80,7 +80,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Provisioned {len(provisioned)} demo users "
-                    f"(shared password: {password})."
+                    "(shared password set; not logged)."
                 )
             )
 

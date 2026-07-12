@@ -184,6 +184,22 @@ def _failure_reason(code: PaymentFailureCode) -> str:
     return _FAILURE_REASONS.get(code, "Payment failed")
 
 
+def _require_cents(value: int) -> int:
+    """Return ``value`` unchanged iff it is a non-negative, non-bool ``int`` (cents).
+
+    Mirrors the integer-cent money discipline in :mod:`common.money`: reject
+    floats / strings / bools and negatives outright instead of silently
+    truncating (``int(100.99) == 100``) or coercing types. Never mutates the
+    value — the exact amount the caller passed is what is charged and persisted
+    (specs/07).
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError("amount_cents must be an int (cents)")
+    if value < 0:
+        raise ValueError("amount_cents must be >= 0")
+    return value
+
+
 # --------------------------------------------------------------------------- #
 # Adapter interface
 # --------------------------------------------------------------------------- #
@@ -267,6 +283,9 @@ class SimulatedPaymentAdapter:
         from google.cloud import firestore  # lazy — see module docstring.
 
         doc_ref = self._doc_ref(processor_idempotency_key)
+        # Reject non-integer / bool / negative cents up front (fail fast, before
+        # any ledger write) — never truncate or coerce the amount (specs/07).
+        _require_cents(amount_cents)
         failure_code = _resolve_scripted_outcome(metadata)
 
         # Precompute the row we would write for a fresh charge.
@@ -279,7 +298,7 @@ class SimulatedPaymentAdapter:
                 ),
                 "failureCode": None,
                 "failureReason": None,
-                "amountCents": int(amount_cents),
+                "amountCents": amount_cents,
                 "currency": currency,
                 "simulatedOutcome": (metadata or {}).get("simulatedOutcome"),
                 "chargedAt": firestore.SERVER_TIMESTAMP,
@@ -291,7 +310,7 @@ class SimulatedPaymentAdapter:
                 "processorReference": None,
                 "failureCode": str(failure_code),
                 "failureReason": _failure_reason(failure_code),
-                "amountCents": int(amount_cents),
+                "amountCents": amount_cents,
                 "currency": currency,
                 "simulatedOutcome": (metadata or {}).get("simulatedOutcome"),
                 "chargedAt": firestore.SERVER_TIMESTAMP,

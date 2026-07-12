@@ -44,7 +44,7 @@ The `common/` core is deliberately dependency-free so it runs offline; the rest 
 - `firebase.json` lives **inside `firebase/`** (not the repo root) — run `firebase` from that directory or pass `--config firebase/firebase.json`.
 - Rules and indexes are the **source of truth**; never edit them in the Firebase console. Deploy with `firebase deploy --only firestore:rules,firestore:indexes`.
 
-**Backend/frontend (verified on CI, which has network):** backend Django — `python manage.py check`, `python manage.py test --tag=unit` (pure), and the emulator step `firebase emulators:exec … "cd backend && python manage.py test --tag=emulator"` (activation, the two-phase payment, concurrency + fencing gates); frontend Next.js — `npm run lint|test|build`. The `detect` job gates these on file presence, so they activate as directories appear. The offline sandbox can only run the framework-free `common/` suite locally (above).
+**Backend/frontend (verified on CI, which has network):** backend Django — `python manage.py check`, `python manage.py test --tag=unit` (pure), and the emulator step `firebase emulators:exec --project=demo-benefitservicing-workbench --config firebase/firebase.json "cd backend && python manage.py test --tag=emulator"` (activation, the two-phase payment, concurrency + fencing gates); frontend Next.js — `npm run lint|test|build`. The `detect` job gates these on file presence, so they activate as directories appear. The offline sandbox can only run the framework-free `common/` suite locally (above).
 
 ## Architecture (the load-bearing ideas)
 

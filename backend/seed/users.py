@@ -52,8 +52,9 @@ def provision_demo_users(client, *, password: str = DEFAULT_PASSWORD) -> list[st
         try:
             user = fb_auth.get_user_by_email(email)
         except fb_auth.UserNotFoundError:
-            user = None
-        except Exception:  # noqa: BLE001 — emulator surfaces not-found variously
+            # Only "no such user" falls through to create_user; any other error
+            # (Auth emulator down, permission, misconfiguration) must propagate
+            # rather than be silently mistaken for a missing user.
             user = None
 
         if user is None:
@@ -78,20 +79,32 @@ def provision_demo_users(client, *, password: str = DEFAULT_PASSWORD) -> list[st
         fb_auth.set_custom_user_claims(uid, claims)
 
         # users/{uid} mirror doc (client-unwritable; role mirrors the claim).
+        # Re-seed must not rewind the audit trail: on an EXISTING doc preserve
+        # createdAt/createdBy and BUMP revision instead of resetting them
+        # (specs/04 §4.12 — revision is a monotonic per-doc audit counter).
+        mirror_ref = client.collection("users").document(uid)
+        snapshot = mirror_ref.get()
+        existing = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+
         mirror = {
             "uid": uid,
             "email": email,
             "displayName": display_name,
             "role": role_str,
             "status": "ACTIVE",
-            "createdAt": server_ts,
             "updatedAt": server_ts,
-            "createdBy": ACTOR_ID,
             "updatedBy": ACTOR_ID,
-            "revision": 0,
             "schemaVersion": 1,
         }
-        client.collection("users").document(uid).set(mirror)
+        if existing:
+            mirror["createdAt"] = existing.get("createdAt", server_ts)
+            mirror["createdBy"] = existing.get("createdBy", ACTOR_ID)
+            mirror["revision"] = int(existing.get("revision", 0)) + 1
+        else:
+            mirror["createdAt"] = server_ts
+            mirror["createdBy"] = ACTOR_ID
+            mirror["revision"] = 0
+        mirror_ref.set(mirror)
         provisioned.append(f"{email} -> {role_str}")
 
     return provisioned

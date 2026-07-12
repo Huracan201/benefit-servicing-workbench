@@ -406,4 +406,4 @@ def activate_benefit(
     except domain_errors.DomainError as exc:
         # state_machines / invariants raised a framework-free domain error;
         # re-raise the HTTP-aware equivalent (409) for the view.
-        raise from_domain_error(exc)
+        raise from_domain_error(exc) from exc

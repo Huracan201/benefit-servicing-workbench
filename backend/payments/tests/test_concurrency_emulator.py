@@ -77,9 +77,20 @@ class ConcurrencyGateTests(SimpleTestCase):
             t.start()
         for t in threads:
             t.join(timeout=60)
+            self.assertFalse(t.is_alive(), "worker thread hung")
 
-        # --- every non-error result must describe the SAME single posting --
+        # --- BOTH workers must finish with an ALLOWED outcome: the single
+        #     POSTED success or a benign conflict — never a second charge. ---
+        self.assertEqual(
+            len(results) + len(errors), 2,
+            f"both workers must finish: results={results} errors={errors}",
+        )
         posted_results = [r for r in results if r.get("status") == str(ContributionStatus.POSTED)]
+        # Every returned result must be that single POSTED outcome (a replay of
+        # it) — no other status may slip through unasserted.
+        self.assertEqual(
+            len(posted_results), len(results), f"every result must be POSTED: {results!r}"
+        )
         # At least one caller succeeded; any second success is a replay of it.
         self.assertGreaterEqual(len(posted_results), 1, f"errors={errors}")
         for r in posted_results:
