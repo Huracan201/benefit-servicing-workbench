@@ -39,6 +39,7 @@ class AddNoteView(APIView):
     """``POST /loans/{loanId}/notes`` (specs/10 §10.5)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "note-write"
 
     def post(self, request: Request, loan_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)

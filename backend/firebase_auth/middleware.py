@@ -37,6 +37,12 @@ class InternalOIDCMiddleware:
             denial = self._authorize(request)
             if denial is not None:
                 return denial
+            # Ingress verified. Stamp a marker the handler re-asserts at the
+            # command boundary (defense-in-depth, specs/12 §12.5): if this
+            # middleware is ever removed/reordered/bypassed the marker is absent,
+            # so the handler mints a NON-SYSTEM context and the authority guard
+            # fails closed instead of running SYSTEM for an unauthenticated caller.
+            request.internal_verified = True
         return self.get_response(request)
 
     # -----------------------------------------------------------------

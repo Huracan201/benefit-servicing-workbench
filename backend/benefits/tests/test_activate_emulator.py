@@ -28,11 +28,14 @@ from common.enums import (
 from common.firestore import get_client
 from common.ids import contribution_id as _contribution_id
 from common.periods import SYSTEM_TIMEZONE
+from projections import recompute
 from repositories import (
     agreements,
     borrowers,
     contributions,
+    employer_summaries,
     employers,
+    loan_workbenches,
     loans,
     refs,
     stamp_create,
@@ -171,6 +174,12 @@ def _ctx(agreement_id: str) -> CommandContext:
     )
 
 
+def _strip_readmodel(doc: dict) -> dict:
+    """Drop the gateway/get extras (``id``, ``updatedAt``) so a stored read-model
+    doc can be compared field-for-field against the pure recompute output."""
+    return {k: v for k, v in doc.items() if k not in ("id", "updatedAt")}
+
+
 @tag("emulator")
 @unittest.skipUnless(EMULATOR, "requires FIRESTORE_EMULATOR_HOST")
 class ActivateBenefitTests(SimpleTestCase):
@@ -236,6 +245,66 @@ class ActivateBenefitTests(SimpleTestCase):
             .where(filter=refs.field_filter("eventType", "==", "BENEFIT_ACTIVATED"))
         )
         self.assertEqual(len(activated_events), 1)
+
+    def test_inline_activation_updates_read_model_to_active_post_state(self):
+        """The generate tail's terminal ``BENEFIT_ACTIVATED`` fanout nudge corrects
+        the read models from the pre-generation ``ACTIVATING`` snapshot to the
+        ``ACTIVE`` post-state (the projection-fanout gap in the async tail — specs/05
+        §5.2, specs/14 §14.4).
+
+        Under the emulator ``TASK_EXECUTION_MODE`` is inline, so ``activate_benefit``
+        runs the generate-schedule tail AND every ``update-projection`` nudge
+        synchronously. Without the tail nudge, only the command's *starting*
+        ``BENEFIT_ACTIVATION_STARTED`` nudge fires — at ``ACTIVATING``, before any
+        schedule exists — leaving the summaries stale (benefitStatus ``ACTIVATING``,
+        activeBenefits 0, ``$0`` obligation, no look-ahead) until rebuild-summaries.
+        Here the summaries must reflect the ``ACTIVE`` post-state and equal a fresh
+        recompute-from-source.
+        """
+        client = get_client()
+        key = f"actproj_{uuid.uuid4().hex[:10]}"
+        ids = _seed_pending_agreement(
+            client, key, total_commitment_cents=1_000_000, term_months=12
+        )
+        agreement_id = ids["agreement_id"]
+        employer_id = ids["employer_id"]
+        loan_id = ids["loan_id"]
+        base_monthly = 1_000_000 // 12  # == the seed's baseMonthlyContributionCents
+
+        # Clean up the (uniquely-scoped) read-model docs the fanout writes.
+        self.addCleanup(employer_summaries.ref(client, employer_id).delete)
+        self.addCleanup(loan_workbenches.ref(client, loan_id).delete)
+
+        result = activate_benefit(
+            agreement_id=agreement_id, ctx=_ctx(agreement_id), client=client
+        )
+        self.assertEqual(result["status"], str(BenefitStatus.ACTIVE))
+
+        schedule = contributions.list_for_agreement(client, agreement_id)
+        first_amount = schedule[0]["scheduledAmountCents"]
+
+        # --- loanWorkbenches/{loan}: ACTIVE + look-ahead populated (would be
+        #     ACTIVATING + None if stuck on the pre-generation starting nudge). ----
+        lw = loan_workbenches.get(client, loan_id)
+        self.assertIsNotNone(lw, "loan workbench must be written by the activation fanout")
+        self.assertEqual(lw["benefitStatus"], str(BenefitStatus.ACTIVE))
+        self.assertEqual(lw["nextContributionAmountCents"], first_amount)
+        self.assertIsNotNone(lw["nextContributionDate"])
+
+        # --- employerSummaries/{emp}: activeBenefits incremented, obligation set. -
+        es = employer_summaries.get(client, employer_id)
+        self.assertIsNotNone(es, "employer summary must be written by the activation fanout")
+        self.assertEqual(es["activeBenefits"], 1)
+        self.assertEqual(es["monthlyObligationCents"], base_monthly)
+
+        # --- freshness: stored == a fresh recompute (the terminal nudge recomputed
+        #     from the committed ACTIVE source, not a stale ACTIVATING snapshot). ---
+        self.assertEqual(
+            _strip_readmodel(lw), recompute.recompute_loan_workbench(client, loan_id)
+        )
+        self.assertEqual(
+            _strip_readmodel(es), recompute.recompute_employer(client, employer_id)
+        )
 
     def test_activation_fails_when_employment_not_active(self):
         client = get_client()

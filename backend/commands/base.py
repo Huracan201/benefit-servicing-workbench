@@ -232,6 +232,12 @@ class CommandContext:
     * ``request_hash`` — :func:`request_hash` of this request (specs/08 §8.2).
     * ``lease_owner`` — id of this process/attempt holding the idempotency lease
       (specs/08 §8.3); defaults to a fresh token.
+    * ``is_system`` — an **un-forgeable SYSTEM marker** (specs/12 §12.5): ``True``
+      only for contexts minted by :func:`internal.system_context.system_ctx` for
+      Cloud Tasks / Scheduler handlers, which execute as SYSTEM with no
+      authenticated human actor. A request-derived context (``build``) is always
+      non-SYSTEM. Command-level role guards (U2) key authorization off this flag,
+      so it must never be settable from request data.
     """
 
     actor_id: str
@@ -241,6 +247,7 @@ class CommandContext:
     idempotency_key: str = ""
     request_hash: str = ""
     lease_owner: str = field(default_factory=lambda: f"run_{uuid.uuid4().hex}")
+    is_system: bool = False
 
     @classmethod
     def build(cls, *, actor_id: str, actor_role: str, actor_name: str,

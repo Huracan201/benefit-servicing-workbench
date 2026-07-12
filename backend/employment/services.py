@@ -30,10 +30,31 @@ the benefit-status cascade write, and **both** servicing events
 (``EMPLOYMENT_STATUS_CHANGED`` sequence 1, then the cascade event sequence 2)
 share **one** ``correlationId`` and commit in a **single** transaction under
 **one** idempotency key (operation ``change-employment-status``). The bounded
-inline follow-up work — cancel-future-contributions on terminate, schedule-shift
-on resume — runs **after** that transaction commits (the Phase-2 stand-in for
-the Phase-3 Cloud Task; specs/19 §19.2). Those tasks are themselves idempotent,
-so a replay returns the stored result and skips re-running them.
+follow-up work — cancel-future-contributions on terminate, schedule-shift on
+resume — is handed onto its async task via :func:`internal.enqueue.enqueue`
+**after** that transaction commits (the COMPLETION PROTOCOL, Decision A;
+specs/14): inline mode runs it synchronously (``200``), cloud mode defers it
+(``202`` + ``Retry-After``). The task wrapper runs the idempotent tail THEN
+completes the idempotency key; a cascade with **no** tail (a LEAVE-suspend, a
+no-op, or no active agreement) completes the key inside the core transaction
+instead. Those tasks are idempotent, so a redelivery/replay re-drives without
+duplicate side effects.
+
+**Known reaper limitation (deferred).** This command's idempotency record is
+BORROWER-scoped — its ``entityId`` is the ``borrowerId`` — but the cascade tail it
+hands off (cancel-future-contributions / shift-schedule) is AGREEMENT-scoped. The
+enqueue payload carries the ``agreementId`` (and ``commandResult``) so the normal
+inline/cloud handoff completes the key correctly; and a same-key CLIENT retry after
+the lease expires reclaims via the ``reclaimed`` path below and re-derives + re-drives
+the tail. What is NOT covered is the SERVER-driven lease reaper: it reads only the
+record (whose ``entityId`` is a borrowerId, not the agreementId the tail needs) and
+so **defers** an orphaned employment-cascade key rather than re-driving it (see
+``idempotency.reaper._reclaim_one``'s ``OP_EMPLOYMENT`` branch). Closing this would
+require persisting the agreementId onto the idempotency record (a change to the
+``idempotency.service`` write path) AND teaching the reaper to infer which tail to
+re-drive from the agreement's committed status — a broader, correctness-sensitive
+change deliberately left for a later slice. An orphaned key here is unwedged either
+by a same-key client retry or, failing that, by the ``PENDING`` record's TTL.
 """
 
 from __future__ import annotations
@@ -68,6 +89,29 @@ from servicing import events as servicing_events
 
 OPERATION = "change-employment-status"
 ENTITY_TYPE = "BORROWER"
+
+
+def _nudge_projections(ctx: CommandContext, event_type: str, *, loan_id, employer_id) -> None:
+    """POST-COMMIT: fan out the read-model recompute for an employment change.
+
+    Call only AFTER the core transaction commits, on the real (non-replay) path —
+    never inside a transaction (specs/05 §5.1 hot-doc rule). The change mirrors to
+    the loan (employmentStatus) and any benefit cascade restates the portfolio /
+    employer rollups; the fanout maps the eventType to those keys and enqueues an
+    idempotent recompute. Best-effort (the fanout swallows its own errors; the
+    scheduled rebuild is the backstop).
+    """
+    from projections.fanout import enqueue_for_event
+
+    enqueue_for_event(
+        {
+            "eventType": event_type,
+            "loanId": loan_id,
+            "employerId": employer_id,
+            "metadata": {},
+        },
+        ctx=ctx,
+    )
 
 # suspendedReason values (specs/04 §4.6, specs/10 §10.2/§10.4). MANUAL from the
 # suspend command; LEAVE from this employment cascade.
@@ -205,6 +249,7 @@ def change_employment_status(
     # `followup` carries which bounded tail to run.
     ran = {"done": False}
     followup: dict[str, Any] = {}
+    emitted: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -333,15 +378,21 @@ def change_employment_status(
             "correlationId": ctx.correlation_id,
         }
 
-        # NB: idempotency.complete is deliberately NOT called inside this txn —
-        # the key is kept PENDING across the commit -> tail boundary and completed
-        # only AFTER the post-commit tail succeeds (see below), closing the crash
-        # gap where a completed key would replay past an un-run cascade tail.
-        ran["done"] = True
-
-        # Signal the post-commit inline follow-up (not set on a replay return).
+        # COMPLETION PROTOCOL (Decision A). Two cases:
+        #  * A cascade WITH an async tail (terminate → cancel-future, resume →
+        #    schedule-shift): keep the idempotency key PENDING across the commit →
+        #    task boundary; the task wrapper runs the idempotent tail THEN completes
+        #    the key (closing the crash gap where a completed key would replay past
+        #    an un-run tail).
+        #  * A cascade with NO tail (a LEAVE-suspend, a no-op cascade, or no active
+        #    agreement): there is no task to complete the key, so complete it HERE,
+        #    atomically with the transition — exactly like the sync suspend command.
         if cascade_followup:
             followup.update(cascade_followup)
+        else:
+            idempotency.complete(txn, ctx.idempotency_key, result, client=client)
+        emitted.update({"loan_id": loan_id, "employer_id": borrower.get("employerId")})
+        ran["done"] = True
         return result
 
     try:
@@ -351,40 +402,67 @@ def change_employment_status(
     except domain_errors.DomainError as exc:
         raise from_domain_error(exc) from exc
 
-    # --- inline follow-up (AFTER the core txn commits) -----------------------
-    # Run the bounded cascade tail (cancel-future on terminate, schedule-shift on
-    # resume; nothing on a LEAVE-suspend), THEN complete the idempotency key.
-    # Order matters: the key is completed only after the tail succeeds, so a
-    # crash/transient error in the tail leaves the record PENDING and a same-key
-    # retry (after lease expiry) reclaims and re-drives the tail — which is itself
-    # idempotent (zero-duration shift / all-canceled cancel = no-op). Skipped on a
-    # replay (`ran` stays False; the tail already ran on the original call).
-    if ran["done"]:
+    # --- POST-COMMIT: nudge the read-model recompute (off the txn, §5.1) ------
+    # An employment change mirrors to the loan (employmentStatus) and its cascade
+    # may re-status the benefit — so nudge on EVERY real path, independent of
+    # whether a bounded tail follows. Placed before the tail handoff so it runs
+    # even in cloud mode (where the handoff raises 202). Only the real path
+    # populates `emitted` (a replay/in-progress/reuse returns before it).
+    if ran["done"] and emitted:
+        _nudge_projections(
+            ctx, "EMPLOYMENT_STATUS_CHANGED",
+            loan_id=emitted.get("loan_id"), employer_id=emitted.get("employer_id"),
+        )
+
+    # --- follow-up handoff (AFTER the core txn commits) ----------------------
+    # Hand the bounded cascade tail onto the async task via enqueue() (COMPLETION
+    # PROTOCOL, Decision A): cancel-future-contributions on terminate,
+    # shift-schedule on resume. The task runs the idempotent tail body THEN
+    # completes the idempotency key; a crash before that leaves the key
+    # reclaimable so a same-key retry re-drives the idempotent tail (zero-duration
+    # shift / all-canceled cancel = no-op). Inline mode runs it synchronously
+    # (-> 200 with the cascade result); cloud mode returns None (-> 202 +
+    # Retry-After). Skipped on a replay (`ran` stays False) and on a no-tail
+    # cascade (the key was already completed inside the core txn).
+    if ran["done"] and followup:
         kind = followup.get("kind")
+        # The idempotency key must store the COMMAND's response body (`result`
+        # below — the employment change + benefitCascade summary the first caller
+        # received), NOT the tail's side-effect summary (cancel-future's {canceled,
+        # skipped_processing} / shift's {shiftMonths, installmentsShifted,...}), so a
+        # same-key replay / cloud poll returns the identical body (specs/08 §8.2).
+        # The tail adapter completes the key with this `commandResult`.
         if kind == "terminate":
-            from contributions.lifecycle import cancel_future_contributions
-
-            cancel_future_contributions(
-                client,
-                agreement_id=followup["agreement_id"],
-                ctx=ctx,
-                reason=_TERMINATE_REASON,
-            )
+            task, payload = "cancel-future-contributions", {
+                "agreementId": followup["agreement_id"],
+                "reason": _TERMINATE_REASON,
+                "idempotencyKey": ctx.idempotency_key,
+                "commandResult": result,
+            }
         elif kind == "resume":
-            from benefits.shift import shift_schedule
+            task, payload = "shift-schedule", {
+                "agreementId": followup["agreement_id"],
+                "idempotencyKey": ctx.idempotency_key,
+                "commandResult": result,
+                # Carry the suspension anchor so shift-schedule stamps the same
+                # SCHEDULE_SHIFTED window metadata the benefit-command resume does
+                # (the shift amount itself comes from scheduleShiftMonths, so this
+                # is audit metadata only — a reaper re-drive without it stays correct).
+                "suspendedFrom": _iso_or_value(followup.get("suspended_from")),
+            }
+        else:  # pragma: no cover - defensive; _apply_cascade sets only the above
+            task = None
 
-            shift_schedule(
-                client,
-                agreement_id=followup["agreement_id"],
-                ctx=ctx,
-                suspended_from=followup["suspended_from"],
-                resumed_at=now,
-            )
+        if task is not None:
+            from internal.enqueue import enqueue
 
-        def _finalize_idem(txn: Any) -> None:
-            idempotency.complete(txn, ctx.idempotency_key, result, client=client)
-
-        transactional(client)(_finalize_idem)()
+            task_result = enqueue(task, payload, ctx=ctx)
+            if task_result is None:
+                raise OperationInProgress(
+                    "employment status change cascade in progress",
+                    retry_after=RETRY_AFTER_IN_PROGRESS,
+                    state={"borrowerId": borrower_id, "employmentStatus": new_status},
+                )
     return result
 
 

@@ -8,9 +8,13 @@ auth), enforces the role, builds the :class:`commands.base.CommandContext`
 :class:`commands.base.CommandError` to the specs/11 §11.3 response.
 
 Request body ``{ status, effectiveDate, reason }`` (specs/10 §10.4). The command
-runs its benefit cascade + bounded inline follow-up synchronously (Phase 2), so
-a success returns ``200`` with the resulting borrower/benefit summary; an
-in-progress same-key replay yields ``202`` with a ``Retry-After`` hint.
+commits the borrower change + benefit cascade in one transaction, then hands any
+bounded follow-up (cancel-future on terminate, schedule-shift on resume) onto an
+async task (COMPLETION PROTOCOL, Decision A). Inline mode runs it synchronously,
+so a success returns ``200`` with the borrower/benefit summary; cloud mode defers
+it and the command raises :class:`OperationInProgress` → ``202`` + ``Retry-After``
+(the client polls the same idempotency key). An in-progress same-key replay
+likewise yields ``202``.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ class EmploymentStatusView(APIView):
     """``POST /borrowers/{borrowerId}/employment-status`` (specs/10 §10.4)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "employment-write"
 
     def post(self, request: Request, borrower_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)

@@ -26,6 +26,7 @@ callable now so tests can exercise the crash-recovery path directly.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from commands.base import (
@@ -37,6 +38,8 @@ from commands.base import (
 )
 from common.enums import ContributionStatus, ExceptionType, PaymentAttemptStatus
 from common.errors import DomainError
+
+logger = logging.getLogger("bsw.projections")
 
 # Pinned constant (specs/21 §21.1): indeterminate sweeps before escalating.
 MAX_SWEEPS = 6
@@ -134,6 +137,13 @@ def reconcile_contribution(
             )
 
         # -- Phase 3 (finalize, transaction) --------------------------------
+        # The finalize fills `sink` (inside the txn, a plain dict — NOT a Firestore
+        # write) with the entity pointers + periodLabel; we fan the projection
+        # recompute out AFTER commit, off the payment txn (specs/05 §5.1 hot-doc
+        # rule), exactly as payments.service.process_contribution does inline. A
+        # superseded guard returns None before filling the sink (the concurrent
+        # finalizer owns that nudge).
+        sink: dict = {}
         if status_result.status == "SUCCEEDED":
             run = transactional(client)(service.finalize_success)
             result = run(
@@ -145,6 +155,7 @@ def reconcile_contribution(
                 idempotency_key=idempotency_key,
                 reconciled=True,
                 seq_start=1,
+                projection_sink=sink,
             )
         elif status_result.status == "FAILED":
             run = transactional(client)(service.finalize_failure)
@@ -158,6 +169,7 @@ def reconcile_contribution(
                 idempotency_key=idempotency_key,
                 reconciled=True,
                 seq_start=1,
+                projection_sink=sink,
             )
         else:  # NOT_FOUND (fenced)
             run = transactional(client)(service.finalize_not_submitted)
@@ -168,6 +180,7 @@ def reconcile_contribution(
                 attempt_number=attempt_number,
                 idempotency_key=idempotency_key,
                 seq_start=1,
+                projection_sink=sink,
             )
 
         if result is None:
@@ -175,7 +188,8 @@ def reconcile_contribution(
             # None (guard superseded) WITHOUT completing the key. If we hold a
             # reclaimed command key, complete it from current state so it doesn't
             # wedge PENDING (specs/08 §8.3); the superseded finalize never reached
-            # its idempotency.complete, so this cannot double-complete.
+            # its idempotency.complete, so this cannot double-complete. The sink
+            # stayed empty, so no nudge here — the concurrent finalizer owns it.
             if idempotency_key:
                 return _complete_reclaimed_key(
                     client, contribution_id, idempotency_key,
@@ -188,11 +202,43 @@ def reconcile_contribution(
                 "reconciled": True,
                 "superseded": True,
             }
+        else:
+            # POST-COMMIT: off-transaction read-model recompute for the recovered
+            # finalize (specs/05 §5.2). A crash-recovered POSTED/FAILED nudges the
+            # SAME key set a normal (inline two-phase) posting does; this also
+            # covers process_contribution's RECLAIM path, which delegates here.
+            _nudge_after_finalize_guarded(ctx, sink, result)
         return result
     except CommandError:
         raise
     except DomainError as exc:
         raise from_domain_error(exc)
+
+
+def _nudge_after_finalize_guarded(
+    ctx: CommandContext, sink: dict, result: Optional[dict]
+) -> None:
+    """POST-COMMIT: fan out the read-model recompute for a reconcile-recovered finalize.
+
+    Mirrors the inline two-phase path: a crash-recovered ``POSTED`` / ``FAILED`` (or
+    a fenced ``NOT_SUBMITTED`` revert) must nudge the SAME projection key set a normal
+    posting does — ``portfolio_current`` + ``portfolio_period(periodLabel)`` +
+    ``employer`` + ``employer_period`` + ``loan_workbench`` for money movement — off
+    the payment txn (specs/05 §5.1). Delegates the status→eventType mapping + the
+    empty-sink/None-result short-circuit to the shared
+    :func:`payments.service._nudge_projections_after_finalize` (the single definition
+    of that mapping), and wraps it so a fanout failure is logged and can NEVER break
+    the already-committed sweeper; ``rebuild-summaries`` is the backstop.
+    """
+    try:
+        from payments import service
+
+        service._nudge_projections_after_finalize(ctx, sink, result)
+    except Exception:  # noqa: BLE001 — best-effort; rebuild-summaries is the backstop
+        logger.warning(
+            "projection nudge failed after reconcile finalize (rebuild will reconcile)",
+            exc_info=True,
+        )
 
 
 def _complete_reclaimed_key(

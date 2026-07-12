@@ -224,6 +224,7 @@ def finalize_success(
     idempotency_key: Optional[str] = None,
     reconciled: bool = False,
     seq_start: int = 1,
+    projection_sink: Optional[dict] = None,
 ) -> Optional[dict]:
     """Finalize a successful charge → ``POSTED`` (specs/09 §9.1 success branch).
 
@@ -297,6 +298,11 @@ def finalize_success(
     seq = _Seq(seq_start)
     ev = _event_common(contribution)
     period = contribution.get("periodLabel") or period_label(_now_dt())
+    # Surface the entity pointers + period for the POST-COMMIT projection nudge
+    # (specs/05 §5.1). Only populated past the finalize guard, so a superseded
+    # stale driver (guard returned None above) never nudges. NO summary write
+    # happens here — the caller fans out after the transaction commits.
+    _fill_projection_sink(projection_sink, ev, period)
     had_exception = contribution.get("currentExceptionId")
     # Only auto-resolve + decrement the count if the coupled exception is STILL
     # open. An operator may have manually resolved/dismissed it first (recording
@@ -496,6 +502,7 @@ def finalize_failure(
     idempotency_key: Optional[str] = None,
     reconciled: bool = False,
     seq_start: int = 1,
+    projection_sink: Optional[dict] = None,
 ) -> Optional[dict]:
     """Finalize a declined/failed charge (specs/09 §9.1 failure branch).
 
@@ -532,6 +539,9 @@ def finalize_failure(
     seq = _Seq(seq_start)
     ev = _event_common(contribution)
     period = contribution.get("periodLabel") or period_label(_now_dt())
+    # POST-COMMIT projection nudge pointers (see finalize_success). Only past the
+    # guard; no summary write inside this transaction.
+    _fill_projection_sink(projection_sink, ev, period)
 
     if terminated:
         # settle-then-cancel (specs/06 §6.1, specs/09 §9.1, specs/10 §10.4).
@@ -725,6 +735,7 @@ def finalize_not_submitted(
     attempt_number: int,
     idempotency_key: Optional[str] = None,
     seq_start: int = 1,
+    projection_sink: Optional[dict] = None,
 ) -> Optional[dict]:
     """Finalize a fenced ``NOT_FOUND`` verdict (specs/09 §9.4 NOT_FOUND branch).
 
@@ -759,6 +770,9 @@ def finalize_not_submitted(
     seq = _Seq(seq_start)
     ev = _event_common(contribution)
     period = contribution.get("periodLabel") or period_label(_now_dt())
+    # POST-COMMIT projection nudge pointers (see finalize_success). Only past the
+    # guard; no summary write inside this transaction.
+    _fill_projection_sink(projection_sink, ev, period)
 
     # Attempt STARTED -> FAILED(NOT_SUBMITTED) (balances never moved).
     assert_transition("attempt", attempt["status"], PaymentAttemptStatus.FAILED)
@@ -851,6 +865,66 @@ def _complete_idempotency(txn, key: str, result: dict, client) -> None:
     idempotency.complete(txn, key, result, client=client)
 
 
+# --------------------------------------------------------------------------- #
+# Off-transaction projection nudge (specs/05 §5.1 — never on the payment txn)
+# --------------------------------------------------------------------------- #
+# The finalize's terminal contribution status → the servicing eventType the
+# projection fanout keys on (a POSTED finalize is a PAYMENT_POSTED for projection
+# purposes; a NOT_SUBMITTED revert to SCHEDULED/RETRY_PENDING is a reconcile).
+_PROJECTION_EVENT_BY_STATUS = {
+    str(ContributionStatus.POSTED): "PAYMENT_POSTED",
+    str(ContributionStatus.FAILED): "PAYMENT_FAILED",
+    str(ContributionStatus.CANCELED): "PAYMENT_CANCELED",
+    str(ContributionStatus.SCHEDULED): "PAYMENT_RECONCILED",
+    str(ContributionStatus.RETRY_PENDING): "PAYMENT_RECONCILED",
+}
+
+
+def _fill_projection_sink(sink: Optional[dict], ev: dict, period) -> None:
+    """Record the entity pointers + periodLabel a finalize touched, for the caller.
+
+    Populated INSIDE the finalize transaction (a plain-dict write, not a Firestore
+    write) but consumed by the caller AFTER commit to fan out the projection nudge
+    off the payment path (specs/05 §5.1). ``None`` sink = caller wants no nudge.
+    """
+    if sink is None:
+        return
+    sink.update(
+        {
+            "loanId": ev.get("loan_id"),
+            "employerId": ev.get("employer_id"),
+            "periodLabel": period,
+        }
+    )
+
+
+def _nudge_projections_after_finalize(ctx: CommandContext, sink: dict, result: Optional[dict]) -> None:
+    """POST-COMMIT: fan out the read-model recompute for a finalized payment.
+
+    Called only after the finalize transaction commits (never inside it). Maps the
+    finalized status → its projection eventType and enqueues the recompute for the
+    affected portfolio/employer/period/loan keys. Best-effort (the fanout swallows
+    its own errors); skipped when the finalize was a no-op (guard superseded → the
+    sink was never filled, or ``result`` is falsy — the concurrent finalizer nudges).
+    """
+    if not sink or not result:
+        return
+    event_type = _PROJECTION_EVENT_BY_STATUS.get(result.get("status"))
+    if event_type is None:
+        return
+    from projections.fanout import enqueue_for_event
+
+    enqueue_for_event(
+        {
+            "eventType": event_type,
+            "loanId": sink.get("loanId"),
+            "employerId": sink.get("employerId"),
+            "metadata": {"periodLabel": sink.get("periodLabel")},
+        },
+        ctx=ctx,
+    )
+
+
 def _now_dt():
     from datetime import datetime, timezone
 
@@ -915,6 +989,10 @@ def process_contribution(
         )
 
         # ---- Phase 3: finalize (transaction) ------------------------------
+        # The finalize fills `sink` (inside the txn, a plain dict) with the entity
+        # pointers + periodLabel; we fan the projection recompute out AFTER commit,
+        # never on the payment txn (specs/05 §5.1 hot-doc rule).
+        sink: dict = {}
         if charge_result.status == "SUCCEEDED":
             run = transactional(client)(finalize_success)
             result = run(
@@ -925,6 +1003,7 @@ def process_contribution(
                 processor_reference=charge_result.processor_reference,
                 idempotency_key=ctx.idempotency_key,
                 seq_start=2,
+                projection_sink=sink,
             )
         else:
             run = transactional(client)(finalize_failure)
@@ -937,12 +1016,18 @@ def process_contribution(
                 failure_reason=charge_result.failure_reason,
                 idempotency_key=ctx.idempotency_key,
                 seq_start=2,
+                projection_sink=sink,
             )
 
         if result is None:
             # Guard failed — a concurrent finalizer (sweeper) already resolved
             # this attempt. Complete the idempotency key with the current state.
+            # That concurrent finalizer owns the projection nudge (our sink is
+            # empty because our finalize returned before filling it).
             result = _complete_with_current_state(client, ctx, contribution_id)
+        else:
+            # POST-COMMIT: off-transaction read-model recompute (specs/05 §5.2).
+            _nudge_projections_after_finalize(ctx, sink, result)
         return result
     except CommandError:
         raise

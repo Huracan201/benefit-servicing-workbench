@@ -52,6 +52,13 @@ LOAN_WORKBENCHES = "loanWorkbenches"
 # Default schema version stamped on freshly created documents.
 SCHEMA_VERSION = 1
 
+# Default page size for cursor-paginated repository reads (e.g.
+# ``contributions.due``). Bounds how many documents a fan-out/sweep pulls per
+# invocation; the caller pages the remainder via the returned cursor. Distinct
+# from the per-transaction write-batch sizes local to the command modules
+# (those cap writes per Firestore txn; this caps reads per page).
+BATCH_SIZE = 200
+
 
 # --------------------------------------------------------------------------- #
 # Lazy firestore module accessor

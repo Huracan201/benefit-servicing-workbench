@@ -7,7 +7,7 @@ Per-phase engineering reports for the BenefitServicing Workbench — what was bu
 | 1 — Foundation | [phase-1-foundation.md](./phase-1-foundation.md) | ✅ Complete (merged `1261b56`) |
 | 2 — Domain command layer (part 1) | [phase-2-command-layer.md](./phase-2-command-layer.md) | ✅ Merged (`c6671ce`) |
 | 2 — Remaining commands (part 2) | [phase-2-part-2-remaining-commands.md](./phase-2-part-2-remaining-commands.md) | ✅ Merged (`abf3d33`) |
-| Security review — Phase 1 + 2 | [security-review-phase-1-2.md](./security-review-phase-1-2.md) | ✅ Reviewed (no CRITICAL/HIGH); 🔧 hardening applied, pending CI + merge |
-| 3 — Async workflows (Cloud Tasks + projections) | _pending_ | Not started |
+| Security review — Phase 1 + 2 | [security-review-phase-1-2.md](./security-review-phase-1-2.md) | ✅ Reviewed (no CRITICAL/HIGH); hardening merged (PR #4, `bda195b`) |
+| 3 — Async workflows (Cloud Tasks + projections) | [phase-3-async-workflows.md](./phase-3-async-workflows.md) | ✅ Built & QA-verified (3 slices); Slices A+B merged to `release/phase-3` (CI green), Slice C pending CI — draft PR #5 |
 
 These are point-in-time records; the authoritative design is always `specs/`.

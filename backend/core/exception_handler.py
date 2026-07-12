@@ -21,6 +21,7 @@ import logging
 from typing import Any, Optional
 
 from rest_framework import status
+from rest_framework.exceptions import Throttled
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
@@ -31,6 +32,24 @@ def custom_exception_handler(exc: Exception, context: dict) -> Optional[Response
     """Return DRF's response for handled errors; a generic 500 for the rest."""
     response = drf_exception_handler(exc, context)
     if response is not None:
+        # ScopedRateThrottle raises Throttled(429); DRF's default body is
+        # ``{"detail": ...}``, which violates the specs/11 §11.3 envelope every
+        # other error uses. Re-render it as ``{"error": {"code", ...}}`` while
+        # preserving DRF's Retry-After header (the 202/429 poll contract).
+        if isinstance(exc, Throttled):
+            request = context.get("request") if isinstance(context, dict) else None
+            correlation_id = getattr(request, "correlation_id", None)
+            error: dict[str, Any] = {
+                "code": "RATE_LIMITED",
+                "message": "rate limit exceeded",
+            }
+            if correlation_id:
+                error["correlationId"] = correlation_id
+            rendered = Response({"error": error}, status=response.status_code)
+            retry_after = response.headers.get("Retry-After") if hasattr(response, "headers") else None
+            if retry_after is not None:
+                rendered["Retry-After"] = retry_after
+            return rendered
         # DRF already produced a safe, structured response — pass it through.
         return response
 

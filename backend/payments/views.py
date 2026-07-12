@@ -112,6 +112,7 @@ class ProcessContributionView(APIView):
 
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [RequireManager]
+    throttle_scope = "payments-write"
 
     def post(self, request, *args, **kwargs) -> Response:
         return _dispatch(request, _contribution_id(kwargs), process_contribution)
@@ -122,6 +123,7 @@ class RetryContributionView(APIView):
 
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [RequireOperations]
+    throttle_scope = "payments-write"
 
     def post(self, request, *args, **kwargs) -> Response:
         return _dispatch(request, _contribution_id(kwargs), retry_contribution)

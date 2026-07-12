@@ -19,6 +19,7 @@ same-key replay yields ``202`` with a ``Retry-After`` hint.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from rest_framework import status
@@ -109,10 +110,57 @@ def _str_field(
     return value
 
 
+# A caller-supplied entityId is fed straight to Firestore ``.document()`` (via
+# ``loans.ref`` for a LOAN-scoped create, and stored as a pointer otherwise), so
+# its FORMAT must be validated before any transaction: ``.document()`` raises a
+# bare ``ValueError`` on a '/' (path separator), a lone '.'/'..' segment, or the
+# reserved ``__*__`` id pattern — which would surface as an uncaught 500 instead
+# of a clean 400. Restricting to ``[A-Za-z0-9_-]`` also rejects whitespace and
+# punctuation up-front while still admitting every real entity id (the specs seed
+# ids are ``loan_*`` / ``bor_*`` / ``emp_*`` — a prefix + underscore-joined key).
+_SAFE_ENTITY_ID = re.compile(r"\A[A-Za-z0-9_-]+\Z")
+_RESERVED_ID_PATTERN = re.compile(r"\A__.*__\Z")
+
+
+def _normalize_entity_type(entity_type: str) -> str:
+    """Upper-case + allowlist entityType to the set ``create_exception`` scopes.
+
+    Returns the canonical upper-case value (what then gets persisted, so stored
+    ``entityType`` is always canonical). Anything outside
+    :data:`exception_commands.SCOPED_ENTITY_TYPES` (``LOAN``/``BORROWER``/
+    ``EMPLOYER``) is a 400 — never a silently unscoped exception whose live
+    pointers are all null.
+    """
+    normalized = entity_type.upper()
+    if normalized not in exception_commands.SCOPED_ENTITY_TYPES:
+        allowed = ", ".join(sorted(exception_commands.SCOPED_ENTITY_TYPES))
+        raise ValidationError(
+            f"entityType must be one of {{{allowed}}}, got {entity_type!r}"
+        )
+    return normalized
+
+
+def _validate_entity_id(entity_id: str) -> None:
+    """Reject an entityId whose FORMAT Firestore's ``.document()`` would choke on.
+
+    ``entity_id`` has already passed :func:`_str_field` (non-empty, non-blank,
+    length-bounded); this guards the character set so '/', a lone '.'/'..', the
+    reserved ``__*__`` pattern, and any other unsafe character are a clean 400
+    (specs/11 §11.3) rather than an uncaught ``ValueError`` 500.
+    """
+    if _RESERVED_ID_PATTERN.match(entity_id):
+        raise ValidationError("entityId must not match the reserved __*__ pattern")
+    if not _SAFE_ENTITY_ID.match(entity_id):
+        raise ValidationError(
+            "entityId may contain only letters, digits, '-' or '_'"
+        )
+
+
 class CreateExceptionView(APIView):
     """``POST /exceptions`` — create a manual operational exception (specs/11 §11.4)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "exception-write"
 
     def post(self, request: Request) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -146,6 +194,13 @@ class CreateExceptionView(APIView):
                     Severity(severity)
                 except ValueError:
                     raise ValidationError(f"unknown severity {severity!r}")
+            # Normalize + allowlist entityType, and validate entityId FORMAT, both
+            # BEFORE the transaction: create_exception scopes only
+            # {LOAN,BORROWER,EMPLOYER} and feeds entityId to Firestore
+            # .document(), so an unknown type or a '/'-bearing / reserved id is a
+            # clean 400 here instead of an uncaught 500 downstream.
+            entity_type = _normalize_entity_type(entity_type)
+            _validate_entity_id(entity_id)
         except ValidationError as exc:
             return Response(exc.to_body(correlation_id), status=exc.http_status)
 
@@ -169,6 +224,7 @@ class AssignExceptionView(APIView):
     """``POST /exceptions/{exceptionId}/assign`` — status-neutral (specs/06 §6.4)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "exception-write"
 
     def post(self, request: Request, exception_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -206,6 +262,7 @@ class MarkInReviewView(APIView):
     """``POST /exceptions/{exceptionId}/mark-in-review`` (``OPEN`` → ``IN_REVIEW``)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "exception-write"
 
     def post(self, request: Request, exception_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -226,6 +283,7 @@ class ResolveExceptionView(APIView):
     """``POST /exceptions/{exceptionId}/resolve`` (→ ``RESOLVED``)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "exception-write"
 
     def post(self, request: Request, exception_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -258,6 +316,7 @@ class DismissExceptionView(APIView):
     """``POST /exceptions/{exceptionId}/dismiss`` (→ ``DISMISSED``)."""
 
     permission_classes = [RequireOperations]
+    throttle_scope = "exception-write"
 
     def post(self, request: Request, exception_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
