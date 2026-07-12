@@ -12,7 +12,8 @@ from django.urls import include, path
 urlpatterns = [
     # Operational: GET /health, GET /readiness (specs/16 §16.5).
     path("", include("core.urls")),
-    # Reserved — Phase 2:
-    # path("api/v1/", include("api.urls")),      # business command endpoints (specs/11)
+    # Phase 2: business command endpoints (specs/11 §11.4).
+    path("api/v1/", include("api.urls")),
+    # Reserved — Phase 3:
     # path("internal/", include("internal.urls")),  # task + scheduler handlers (specs/14)
 ]

@@ -73,6 +73,13 @@ INSTALLED_APPS = [
     "common",
     "firebase_auth",
     "core",
+    # Phase 2 — domain command layer (specs/19 §19.2).
+    "servicing",
+    "exceptions",
+    "payments",
+    "benefits",
+    "contributions",
+    "seed",
 ]
 
 MIDDLEWARE = [
