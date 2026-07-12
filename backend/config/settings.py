@@ -255,8 +255,11 @@ if ENVIRONMENT == "production":
         _misconfigured.append("DEBUG must be 0")
     if SECRET_KEY == "dev-insecure-secret-key-change-me-in-production":
         _misconfigured.append("DJANGO_SECRET_KEY must be set (not the dev default)")
-    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
-        _misconfigured.append("ALLOWED_HOSTS must be an explicit non-wildcard list")
+    _dev_allowed_hosts = {"localhost", "127.0.0.1", "testserver"}
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS or set(ALLOWED_HOSTS) <= _dev_allowed_hosts:
+        _misconfigured.append(
+            "ALLOWED_HOSTS must be an explicit non-wildcard list (not the dev default)"
+        )
     if INTERNAL_DEV_SECRET == "dev-internal-secret":
         _misconfigured.append("INTERNAL_DEV_SECRET must be set (not the dev default)")
     if _misconfigured:
