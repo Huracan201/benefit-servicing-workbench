@@ -3,7 +3,7 @@
 
 Deterministic id ``{agreementId}__{installmentNumber:03d}`` (``common.ids``).
 Queries here back the payment look-ahead (``next_scheduled``), the schedule
-listing (``list_for_agreement``), and the monthly/sweeper due-run (``due``).
+listing (``list_for_agreement``), and the paginated enqueue-due run (``due``).
 """
 
 from __future__ import annotations
@@ -64,16 +64,39 @@ def due(
     as_of: datetime,
     *,
     status: str = str(ContributionStatus.SCHEDULED),
-) -> list[dict[str, Any]]:
-    """Contributions in ``status`` whose ``scheduledDate`` is on/before ``as_of``.
+    limit: int = refs.BATCH_SIZE,
+    start_after: Optional[Any] = None,
+) -> tuple[list[dict[str, Any]], Optional[Any]]:
+    """One page of contributions in ``status`` with ``scheduledDate <= as_of``.
 
-    Ordered by ``scheduledDate`` (the inequality field must lead the ordering).
-    Drives the monthly processing run and the reconciliation sweeper.
+    Ordered by ``scheduledDate`` (the inequality field must lead the ordering),
+    then by ``__name__`` (the document id) as a **stable total-order tiebreak**:
+    many installments share the same noon ``scheduledDate`` (SYSTEM_TIMEZONE), so
+    ``scheduledDate`` alone is *not* a deterministic cursor — a page boundary that
+    lands inside a shared timestamp would skip or duplicate rows. Ordering
+    additionally by the unique id pins every cursor to an exact position.
+
+    Returns ``(page, next_cursor)``. ``page`` is up to ``limit`` dict-with-id
+    documents in ``(scheduledDate, id)`` order. ``next_cursor`` is the last
+    document's snapshot — pass it back as ``start_after`` to fetch the next page —
+    when a *full* page was returned, else ``None`` to signal the terminal page (a
+    short or empty page means no rows remain).
+
+    Drives the enqueue-due run: the caller loops, feeding ``next_cursor`` back in
+    until it is ``None``. (The reconciliation sweeper is a *separate* query keyed
+    on ``lastAttemptAt`` — not this one.) Requires the ``(status, scheduledDate,
+    __name__)`` composite index.
     """
     query = (
         client.collection(refs.SCHEDULED_CONTRIBUTIONS)
         .where(filter=refs.field_filter("status", "==", str(status)))
         .where(filter=refs.field_filter("scheduledDate", "<=", as_of))
         .order_by("scheduledDate")
+        .order_by("__name__")
     )
-    return refs.stream_to_dicts(query)
+    if start_after is not None:
+        query = query.start_after(start_after)
+    snapshots = list(query.limit(limit).stream())
+    page = [refs.snapshot_to_dict(snap) for snap in snapshots]
+    next_cursor = snapshots[-1] if len(snapshots) == limit else None
+    return page, next_cursor

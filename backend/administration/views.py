@@ -68,6 +68,7 @@ class SetUserRoleView(APIView):
     """``POST /admin/users/{uid}/role`` (specs/12 §12.3) — body ``{"role": ...}``."""
 
     permission_classes = [RequireAdmin]
+    throttle_scope = "admin-write"
 
     def post(self, request: Request, uid: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -103,6 +104,7 @@ class SetEmployerStatusView(APIView):
     """``POST /admin/employers/{employerId}/status`` (specs/06 §6.6a, §11.4)."""
 
     permission_classes = [RequireAdmin]
+    throttle_scope = "admin-write"
 
     def post(self, request: Request, employer_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)

@@ -92,6 +92,8 @@ INSTALLED_APPS = [
     "administration",
     "employment",
     "seed",
+    # Phase 3 — async infrastructure foundation (specs/14, specs/21 §21.5).
+    "internal",
 ]
 
 MIDDLEWARE = [
@@ -126,6 +128,22 @@ DATABASES = {
 
 
 # ---------------------------------------------------------------------------
+# Cache — backs DRF's ScopedRateThrottle request counters (specs/19 Phase 3).
+# ---------------------------------------------------------------------------
+# The ONLY consumer today is the mutating-endpoint rate limiter below. NOTE:
+# LocMemCache is per-process, so on multi-instance Cloud Run each instance keeps
+# its OWN counters and the effective ceiling is (rate x instance count). That is
+# an acceptable coarse limit for the demo; a real deploy points CACHES at a
+# shared Memorystore/Redis so the limit is enforced fleet-wide.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "bsw-throttle",
+    }
+}
+
+
+# ---------------------------------------------------------------------------
 # Django REST Framework
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
@@ -143,6 +161,26 @@ REST_FRAMEWORK = {
     # INTERNAL_ERROR 500 with the detail logged server-side — never a traceback
     # in the body, even if DEBUG is on (specs/11 §11.3, specs/16).
     "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
+    # Rate limiting on the mutating command endpoints (specs/19 Phase-3 security
+    # prerequisite; security-review-phase-1-2 §7/§8). ScopedRateThrottle throttles
+    # ONLY views that declare a ``throttle_scope``; scope-less views (reads,
+    # /health, /readiness, and the /internal task handlers) always pass through.
+    # A Throttled(429) is rendered centrally by the EXCEPTION_HANDLER above, so no
+    # view needs per-request throttle handling. Each per-scope rate is
+    # env-overridable so a deploy can tune (or disable, via a high value) a scope
+    # without a code change.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "payments-write": env_str("THROTTLE_PAYMENTS_WRITE", "60/min"),
+        "benefit-write": env_str("THROTTLE_BENEFIT_WRITE", "60/min"),
+        "employment-write": env_str("THROTTLE_EMPLOYMENT_WRITE", "60/min"),
+        "exception-write": env_str("THROTTLE_EXCEPTION_WRITE", "60/min"),
+        "note-write": env_str("THROTTLE_NOTE_WRITE", "60/min"),
+        # Admin commands are rare and high-impact -> a lower default ceiling.
+        "admin-write": env_str("THROTTLE_ADMIN_WRITE", "30/min"),
+    },
 }
 
 
@@ -196,6 +234,8 @@ TASK_EXECUTION_MODE = env_str(
 )
 TASKS_AUDIENCE = env_str("TASKS_AUDIENCE", "")
 TASKS_INVOKER_SA = env_str("TASKS_INVOKER_SA", "")
+# Cloud Tasks queue location (specs/21 §21.2 — region us-east4).
+TASKS_LOCATION = env_str("TASKS_LOCATION", "us-east4")
 # Shared-secret used for /internal/* auth when running under the emulator.
 INTERNAL_DEV_SECRET = env_str("INTERNAL_DEV_SECRET", "dev-internal-secret")
 

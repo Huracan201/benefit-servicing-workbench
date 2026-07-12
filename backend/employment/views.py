@@ -41,6 +41,7 @@ class EmploymentStatusView(APIView):
     """``POST /borrowers/{borrowerId}/employment-status`` (specs/10 §10.4)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "employment-write"
 
     def post(self, request: Request, borrower_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)

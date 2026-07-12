@@ -20,12 +20,15 @@ handle replay/in-progress/reuse → validate/transition → writes → events �
 The Firebase custom-claim write in :func:`set_user_role` is not a Firestore
 operation, so — like the payment adapter charge in :mod:`payments.service` — it
 runs *outside* the transaction, in that module's **two-phase** shape: Phase 1
-opens the idempotency record (PENDING); Phase 2 sets the claim on the ``NEW``/
-proceed path **only**; Phase 3 writes the ``users/{uid}`` mirror + event and
-completes the record. Gating the claim write behind a ``NEW`` outcome keeps it
+opens the idempotency record (PENDING); Phase 2 sets the claim — and, on a
+*demotion*, revokes the user's refresh tokens (specs/12 §12.3, closing the loop
+with the write-path ``verify_id_token(check_revoked=True)`` so a lost privilege
+takes effect immediately rather than after the ~1h ID-token TTL) — on the
+``NEW``/proceed path **only**; Phase 3 writes the ``users/{uid}`` mirror + event
+and completes the record. Gating the claim write behind a ``NEW`` outcome keeps it
 inside the idempotency envelope, so a *replay* returns the stored result **without
-re-issuing it** (setting a role claim is still naturally idempotent, so a
-post-crash lease reclaim that re-asserts the same claim remains harmless). All
+re-issuing it** (setting a role claim and revoking tokens are both naturally
+idempotent, so a post-crash lease reclaim that re-asserts them remains harmless). All
 ``firebase_admin`` / ``google.cloud`` imports are lazy so this module
 ``py_compile``s in an offline sandbox.
 """
@@ -49,7 +52,7 @@ from commands.base import (
 from common import errors as domain_errors
 from common import state_machines
 from common.enums import EmployerStatus
-from firebase_auth.permissions import ROLE_ORDER
+from firebase_auth.permissions import ROLE_ORDER, role_rank
 from idempotency import service as idempotency
 from repositories import employers, stamp_create, stamp_update, users
 from servicing import events as servicing_events
@@ -92,8 +95,9 @@ def set_user_role(
     :mod:`payments.service` two-phase split so the authoritative custom-claim write
     sits INSIDE the idempotency envelope: Phase 1 opens the record (replay → stored
     result, live lease → ``202``, same key/different body → ``409``); the claim is
-    set only on a ``NEW`` outcome (never on replay); Phase 3 writes the mirror +
-    event and completes the record.
+    set — and, on a demotion (``role_rank(new) < role_rank(previous)``), refresh
+    tokens revoked — only on a ``NEW`` outcome (never on replay); Phase 3 writes the
+    mirror + event and completes the record.
     """
     if not isinstance(role, str):
         raise ValidationError("role must be a string", code="INVALID_ROLE")
@@ -239,6 +243,20 @@ def set_user_role(
         # A FirebaseError / transient Auth outage is a backend failure: let it
         # propagate as a retryable 5xx rather than masking it as a 409 (a wrapped
         # DomainError). specs/16: don't turn outages into client-error codes.
+
+        # --- Phase 2b (NO transaction): on a DEMOTION, revoke refresh tokens ----
+        # A strictly-lower target rank (role_rank(role) < role_rank(previous_role))
+        # means the user is LOSING privilege. Revoking their refresh tokens closes
+        # the loop with the write-path verify_id_token(check_revoked=True) (specs/12
+        # §12.3) so the demotion takes effect immediately instead of lingering for
+        # the ~1h ID-token TTL. Inside the NEW-outcome gate only (Phase 2 never runs
+        # on a replay), so an Idempotency-Key replay does NOT re-revoke; revocation
+        # is naturally idempotent, so a post-crash lease reclaim that re-runs Phase 2
+        # safely re-revokes. A promotion / lateral / first-grant (previous_role None
+        # ranks -1) never revokes. A transient FirebaseError propagates as a
+        # retryable 5xx — same rationale as the claim write above.
+        if role_rank(role) < role_rank(previous_role):
+            firebase_auth_sdk.revoke_refresh_tokens(uid)
 
         return transactional(client)(_phase3_finalize)()
     except CommandError:

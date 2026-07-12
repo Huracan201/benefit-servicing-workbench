@@ -8,6 +8,10 @@ break-glass path, run by an operator with project credentials. It:
 
 1. resolves the Firebase user by email,
 2. sets the authoritative ``role`` custom claim via the Admin SDK,
+   2b. on a **demotion** (``role_rank(new) < role_rank(previous)``) revokes the
+   user's refresh tokens — parity with the runtime ``set_user_role`` command and
+   the write-path ``verify_id_token(check_revoked=True)`` (specs/12 §12.3) so the
+   reduced privilege takes effect immediately, not after the ~1h ID-token TTL,
 3. upserts the ``users/{uid}`` mirror document (via :mod:`common.firestore`),
 4. appends an immutable ``USER_ROLE_CHANGED`` servicing event with
    ``actorType: SYSTEM`` (global-only — role changes have no loan/borrower scope,
@@ -21,7 +25,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from firebase_auth.permissions import ROLE_ORDER
+from firebase_auth.permissions import ROLE_ORDER, role_rank
 
 
 class Command(BaseCommand):
@@ -67,6 +71,20 @@ class Command(BaseCommand):
             firebase_auth_sdk.set_custom_user_claims(uid, new_claims)
         except Exception as exc:  # noqa: BLE001
             raise CommandError(f"Failed to set custom claims for {uid}: {exc}")
+
+        # 2b. On a DEMOTION (strictly-lower target rank) revoke refresh tokens so the
+        # reduced privilege takes effect immediately — parity with the runtime
+        # set_user_role command and the write-path verify_id_token(check_revoked=True)
+        # (specs/12 §12.3). A promotion / lateral / first grant (previous_role None
+        # ranks -1) leaves existing sessions intact.
+        demoted = role_rank(role) < role_rank(previous_role)
+        if demoted:
+            try:
+                firebase_auth_sdk.revoke_refresh_tokens(uid)
+            except Exception as exc:  # noqa: BLE001
+                raise CommandError(
+                    f"Failed to revoke refresh tokens for {uid}: {exc}"
+                )
 
         # 3. Upsert the users/{uid} mirror + 4. append the audit event, together.
         from common.firestore import get_client
@@ -129,5 +147,6 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Set role {role} for {email} (uid={uid}); "
                 f"previous role: {previous_role}."
+                + (" Refresh tokens revoked (demotion)." if demoted else "")
             )
         )

@@ -76,6 +76,15 @@ _LOAN_ENTITY_TYPE = "LOAN"
 _BORROWER_ENTITY_TYPE = "BORROWER"
 _EMPLOYER_ENTITY_TYPE = "EMPLOYER"
 
+#: The complete set of entityType values create_exception scopes, compared
+#: upper-case. Exported so exceptions.views can allowlist a request's entityType
+#: up-front against the SAME set this module keys its scoping on — the view's
+#: guard and the scoping logic below cannot drift. An entityType outside this set
+#: would otherwise create a silently unscoped exception (all pointers null).
+SCOPED_ENTITY_TYPES = frozenset(
+    {_LOAN_ENTITY_TYPE, _BORROWER_ENTITY_TYPE, _EMPLOYER_ENTITY_TYPE}
+)
+
 
 # --------------------------------------------------------------------------- #
 # Lazy firestore + txn-read helpers (mirror payments.service / benefits.services)

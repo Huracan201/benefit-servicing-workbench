@@ -88,6 +88,7 @@ class ActivateBenefitView(APIView):
     """``POST /benefit-agreements/{agreementId}/activate`` (specs/10 §10.1)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "benefit-write"
 
     def post(self, request: Request, agreement_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -101,6 +102,7 @@ class SuspendBenefitView(APIView):
     """``POST /benefit-agreements/{agreementId}/suspend`` (specs/10 §10.2)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "benefit-write"
 
     def post(self, request: Request, agreement_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -114,6 +116,7 @@ class ResumeBenefitView(APIView):
     """``POST /benefit-agreements/{agreementId}/resume`` (specs/10 §10.2)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "benefit-write"
 
     def post(self, request: Request, agreement_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
@@ -127,6 +130,7 @@ class TerminateBenefitView(APIView):
     """``POST /benefit-agreements/{agreementId}/terminate`` (specs/10 §10.3)."""
 
     permission_classes = [RequireManager]
+    throttle_scope = "benefit-write"
 
     def post(self, request: Request, agreement_id: str) -> Response:
         correlation_id = getattr(request, "correlation_id", None)
