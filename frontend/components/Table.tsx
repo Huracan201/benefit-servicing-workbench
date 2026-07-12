@@ -1,6 +1,7 @@
 // DenseTable (exported as both `Table` and `DenseTable`) — the primary data idiom
 // (specs/15 §15.1, U1 design). Sticky uppercase micro head; tabular-nums, mono,
-// right-aligned money; optional clickable rows (keyboard-accessible); an optional
+// right-aligned money; optional clickable rows (mouse convenience; keyboard/AT via an
+// in-cell link); an optional
 // 3px severity stripe per row keyed by a color token; and loading-skeleton + empty
 // states. The Column<T> shape and TableProps<T> are backward-compatible with the
 // Phase-1 scaffold — the new behaviors are all opt-in.
@@ -31,7 +32,12 @@ export interface TableProps<T> {
   /** How many skeleton rows to show while loading. */
   skeletonRows?: number;
   emptyMessage?: ReactNode;
-  /** Make rows clickable (adds hover + keyboard activation). */
+  /**
+   * Mouse convenience: makes rows clickable (adds cursor + hover + onClick). The
+   * `<tr>` deliberately keeps native row/cell semantics — it gets NO role/tabIndex —
+   * so keyboard and assistive-tech users navigate via a real <a>/<button> rendered
+   * inside the row's primary cell (screens provide that in later slices).
+   */
   onRowClick?: (row: T) => void;
   /** Return a color token to paint a 3px left severity stripe for the row. */
   rowStripe?: (row: T) => ColorToken | undefined;
@@ -118,25 +124,14 @@ export function Table<T>({
                   key={rowKey(row)}
                   className={[
                     "border-b border-border last:border-0",
-                    clickable
-                      ? "cursor-pointer hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-                      : "",
+                    // Mouse-only affordance — the row keeps native row/cell semantics
+                    // (no role/tabIndex); keyboard + AT users activate via a real
+                    // link/button in the primary cell (see the onRowClick doc).
+                    clickable ? "cursor-pointer hover:bg-surface-2" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   onClick={clickable ? () => onRowClick?.(row) : undefined}
-                  tabIndex={clickable ? 0 : undefined}
-                  role={clickable ? "button" : undefined}
-                  onKeyDown={
-                    clickable
-                      ? (e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onRowClick?.(row);
-                          }
-                        }
-                      : undefined
-                  }
                 >
                   {striped ? (
                     <td className="w-[3px] p-0">

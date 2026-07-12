@@ -1,11 +1,11 @@
 "use client";
 
-// ThemeToggle — stamps data-theme on <html>, persists the choice to localStorage,
-// and defaults to the OS prefers-color-scheme when unset (matching the CSS token
-// precedence in globals.css). Both themes are first-class. To avoid a first-paint
-// flash, the app layout (owned elsewhere) should also run a tiny pre-hydration
-// script that applies the stored theme before React mounts — this component owns the
-// runtime toggle + persistence.
+// ThemeToggle — on an explicit user choice it stamps data-theme on <html> and
+// persists it to localStorage; with no stored choice it leaves data-theme ABSENT and
+// follows the OS prefers-color-scheme live (globals.css tracks it), mirroring OS
+// changes into the button label. Both themes are first-class. A tiny pre-hydration
+// script in the app layout applies a stored choice before React mounts to avoid a
+// first-paint flash — this component owns the runtime toggle + persistence.
 
 import { useEffect, useState } from "react";
 
@@ -29,9 +29,26 @@ export function ThemeToggle({ className }: { className?: string }) {
   const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    const initial = storedTheme() ?? systemTheme();
-    setTheme(initial);
-    document.documentElement.setAttribute("data-theme", initial);
+    const stored = storedTheme();
+    if (stored) {
+      // Explicit user choice: stamp it (matches the layout pre-hydration script) and
+      // do NOT follow the OS.
+      setTheme(stored);
+      document.documentElement.setAttribute("data-theme", stored);
+      return;
+    }
+    // No explicit choice: leave data-theme ABSENT so globals.css's
+    // `@media (prefers-color-scheme)` keeps following the OS live. Track the OS purely
+    // to keep the toggle's displayed label/icon in sync as it changes.
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setTheme(mq.matches ? "dark" : "light");
+    const onChange = (e: MediaQueryListEvent) => {
+      // Once the user makes an explicit choice, stop mirroring the OS.
+      if (storedTheme()) return;
+      setTheme(e.matches ? "dark" : "light");
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   function toggle() {

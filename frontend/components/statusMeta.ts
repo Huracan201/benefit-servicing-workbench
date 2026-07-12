@@ -94,10 +94,10 @@ const STATUS_META: Record<string, StatusMeta> = {
   SUCCEEDED: { token: "good", label: "Succeeded" },
   // BenefitStatus
   DRAFT: { token: "neutral", label: "Draft" },
-  PENDING: { token: "info", label: "Pending" },
+  PENDING: { token: "neutral", label: "Pending" },
   ACTIVATING: { token: "warning", label: "Activating" },
   ACTIVE: { token: "good", label: "Active" },
-  SUSPENDED: { token: "neutral", label: "Suspended" },
+  SUSPENDED: { token: "warning", label: "Suspended" },
   COMPLETED: { token: "good", label: "Completed" },
   TERMINATED: { token: "neutral", label: "Terminated" },
   // EmploymentStatus (ACTIVE/PENDING/TERMINATED shared above)

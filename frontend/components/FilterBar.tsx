@@ -6,7 +6,7 @@
 // index-backed filters (specs/05). The bar itself is presentational; the parent owns
 // state and re-subscribes on change.
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 export interface FilterBarProps {
   children: ReactNode;
@@ -63,7 +63,10 @@ export function FilterSelect({
   includeAll = true,
   id,
 }: FilterSelectProps) {
-  const selectId = id ?? `filter-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  // A stable, collision-free id even when two selects share the same label; an
+  // explicit `id` prop still overrides for callers that need a known target.
+  const generatedId = useId();
+  const selectId = id ?? generatedId;
   return (
     <label
       htmlFor={selectId}
