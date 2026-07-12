@@ -46,10 +46,13 @@ class SeedSummariesTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.client = get_client()
+        # NB: use ``fs`` not ``client`` — SimpleTestCase reserves ``self.client``
+        # for the Django test HTTP client (a ``Client`` with no ``.collection``),
+        # which would otherwise shadow the Firestore client in every test method.
+        cls.fs = get_client()
         # Full deterministic seed once for the whole class (data only; run() does not
         # touch Firebase Auth). run() also rebuilds every summary from source.
-        cls.stats = SeedRunner(cls.client).run()
+        cls.stats = SeedRunner(cls.fs).run()
 
     # -- helpers ---------------------------------------------------------- #
     @staticmethod
@@ -65,18 +68,18 @@ class SeedSummariesTests(SimpleTestCase):
         self.assertGreater(self.stats.get("summaries", 0), len(ACCOUNTS))
 
     def test_portfolio_current_populated_and_source_consistent(self) -> None:
-        stored = portfolio_summaries_repo.get_current(self.client)
+        stored = portfolio_summaries_repo.get_current(self.fs)
         self.assertIsNotNone(stored, "portfolioSummaries/current missing after seed")
         self.assertIn("updatedAt", stored)
         self.assertEqual(
             self._derived(stored),
-            recompute.recompute_portfolio_current(self.client),
+            recompute.recompute_portfolio_current(self.fs),
         )
         # Independent hand count: activeLoans == number of ACTIVE loan docs, and the
         # seed activates all 20 loans (terminated employment leaves the LOAN active).
         active_loans = sum(
             1
-            for snap in self.client.collection(refs.LOANS).stream()
+            for snap in self.fs.collection(refs.LOANS).stream()
             if (snap.to_dict() or {}).get("loanStatus") == str(LoanStatus.ACTIVE)
         )
         self.assertEqual(stored["activeLoans"], active_loans)
@@ -86,31 +89,31 @@ class SeedSummariesTests(SimpleTestCase):
         # Every account's installment (posted + 1) is due in the current month, so
         # the current period always has contributions and thus a period doc.
         period = period_label(datetime.now(SYSTEM_TIMEZONE))
-        stored = portfolio_summaries_repo.get_period(self.client, period)
+        stored = portfolio_summaries_repo.get_period(self.fs, period)
         self.assertIsNotNone(
             stored, f"portfolioSummaries/{period} missing after seed"
         )
         self.assertEqual(stored["periodLabel"], period)
         self.assertEqual(
             self._derived(stored),
-            recompute.recompute_portfolio_period(self.client, period),
+            recompute.recompute_portfolio_period(self.fs, period),
         )
 
     def test_each_employer_summary_populated_and_source_consistent(self) -> None:
         for emp in EMPLOYERS:
-            stored = employer_summaries_repo.get(self.client, emp["id"])
+            stored = employer_summaries_repo.get(self.fs, emp["id"])
             self.assertIsNotNone(
                 stored, f"employerSummaries/{emp['id']} missing after seed"
             )
             self.assertEqual(stored["employerName"], emp["name"])
             self.assertEqual(
                 self._derived(stored),
-                recompute.recompute_employer(self.client, emp["id"]),
+                recompute.recompute_employer(self.fs, emp["id"]),
             )
             # The per-employer current-period bucket is written too.
             period = period_label(datetime.now(SYSTEM_TIMEZONE))
             self.assertIsNotNone(
-                employer_summaries_repo.get_period(self.client, emp["id"], period),
+                employer_summaries_repo.get_period(self.fs, emp["id"], period),
                 f"employerSummaries/{emp['id']}/periods/{period} missing",
             )
 
@@ -118,21 +121,21 @@ class SeedSummariesTests(SimpleTestCase):
         memorial = "emp_memorial"
         active_borrowers = sum(
             1
-            for snap in self.client.collection(refs.BORROWERS)
+            for snap in self.fs.collection(refs.BORROWERS)
             .where(filter=refs.field_filter("employerId", "==", memorial))
             .stream()
             if (snap.to_dict() or {}).get("employmentStatus")
             == str(EmploymentStatus.ACTIVE)
         )
         self.assertEqual(
-            employer_summaries_repo.get(self.client, memorial)["activeBorrowers"],
+            employer_summaries_repo.get(self.fs, memorial)["activeBorrowers"],
             active_borrowers,
         )
 
     def test_each_loan_workbench_populated_and_source_consistent(self) -> None:
         for spec in ACCOUNTS:
             loan_id = f"loan_{spec.key}"
-            stored = loan_workbenches_repo.get(self.client, loan_id)
+            stored = loan_workbenches_repo.get(self.fs, loan_id)
             self.assertIsNotNone(
                 stored, f"loanWorkbenches/{loan_id} missing after seed"
             )
@@ -140,7 +143,7 @@ class SeedSummariesTests(SimpleTestCase):
             self.assertEqual(stored["borrowerName"], f"{spec.first} {spec.last}")
             self.assertEqual(
                 self._derived(stored),
-                recompute.recompute_loan_workbench(self.client, loan_id),
+                recompute.recompute_loan_workbench(self.fs, loan_id),
             )
 
 
