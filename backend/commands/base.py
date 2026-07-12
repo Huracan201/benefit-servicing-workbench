@@ -39,6 +39,12 @@ ASYNC_LEASE_TTL_SECONDS = 30 * 60  # async commands (activation, termination)
 RETRY_AFTER_IN_PROGRESS = 2       # seconds, in-progress idempotency key
 RETRY_AFTER_ACTIVATION = 5        # seconds, async activation
 
+# Free-text length caps (DoS bound — specs/10 §10.5, specs/06 §6.4). Generous
+# ceilings that reject a pathological payload without constraining real usage.
+MAX_FREETEXT_LEN = 10_000     # note text; exception details (long-form)
+MAX_SHORTTEXT_LEN = 1_000     # exception summary; resolution note; dismiss reason
+MAX_IDENTIFIER_LEN = 200      # entityId; entityType; exceptionType (id-ish)
+
 
 # ---------------------------------------------------------------------------
 # requestHash (specs/08 §8.2, normative)

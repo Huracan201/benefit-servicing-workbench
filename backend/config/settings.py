@@ -47,9 +47,18 @@ SECRET_KEY = env_str(
     "dev-insecure-secret-key-change-me-in-production",
 )
 
-DEBUG = env_bool("DEBUG", True)
+# Secure by default: a real deploy need only OMIT these to stay locked down. A
+# missed env var can no longer silently enable traceback disclosure (DEBUG) or a
+# wildcard Host (Host-header poisoning); the guardrail at the end of this module
+# additionally refuses to boot on a leftover default under ENVIRONMENT=production.
+DEBUG = env_bool("DEBUG", False)
 
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "*")
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
+
+# specs/21 §21.3: real deployments set ENVIRONMENT=production, which arms the
+# fail-closed configuration guardrail at the end of this module. CI, local dev,
+# and the emulator leave it "development" and keep these convenient defaults.
+ENVIRONMENT = env_str("ENVIRONMENT", "development")
 
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -130,6 +139,10 @@ REST_FRAMEWORK = {
     # specs/21 §21.1: REST pagination default 50, max 200.
     "PAGE_SIZE": 50,
     "UNAUTHENTICATED_USER": None,
+    # Any exception a view does not itself translate renders as a generic
+    # INTERNAL_ERROR 500 with the detail logged server-side — never a traceback
+    # in the body, even if DEBUG is on (specs/11 §11.3, specs/16).
+    "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
 }
 
 
@@ -224,3 +237,30 @@ LOGGING = {
         },
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Production configuration guardrail (specs/21 §21.3 — fail closed)
+# ---------------------------------------------------------------------------
+# When ENVIRONMENT=production, refuse to boot on any leftover development
+# default rather than silently running insecure: DEBUG would disclose
+# tracebacks, a wildcard/empty ALLOWED_HOSTS invites Host-header poisoning, and
+# the shared dev secrets must never reach a real deployment. CI, local dev, and
+# the emulator leave ENVIRONMENT unset ("development") and are unaffected.
+if ENVIRONMENT == "production":
+    from django.core.exceptions import ImproperlyConfigured
+
+    _misconfigured = []
+    if DEBUG:
+        _misconfigured.append("DEBUG must be 0")
+    if SECRET_KEY == "dev-insecure-secret-key-change-me-in-production":
+        _misconfigured.append("DJANGO_SECRET_KEY must be set (not the dev default)")
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        _misconfigured.append("ALLOWED_HOSTS must be an explicit non-wildcard list")
+    if INTERNAL_DEV_SECRET == "dev-internal-secret":
+        _misconfigured.append("INTERNAL_DEV_SECRET must be set (not the dev default)")
+    if _misconfigured:
+        raise ImproperlyConfigured(
+            "Insecure production configuration — refusing to start: "
+            + "; ".join(_misconfigured)
+        )
