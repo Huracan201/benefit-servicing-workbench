@@ -182,3 +182,65 @@ class SetUserRoleRevokeTests(SimpleTestCase):
             fb_auth.get_user(uid).tokens_valid_after_timestamp or 0, before
         )
         fb_auth.verify_id_token(token, check_revoked=True)  # still valid
+
+    def test_reclaimed_demotion_revokes_using_persisted_role(self):
+        """A demotion that crashed after the claim write but before completing the
+        idempotency record: the reclaim must revoke using the ORIGINAL role
+        persisted on the PENDING record (``recoveryContext``), NOT the already-
+        lowered live claim (specs/08 §8.3). Without the fix the reclaim re-reads the
+        live claim (already OPERATIONS), sees no demotion, and skips revocation."""
+        from datetime import datetime, timedelta, timezone
+
+        from firebase_admin import auth as fb_auth
+
+        from administration.services import ENTITY_USER, OPERATION_ROLE
+        from common.enums import IdempotencyStatus
+        from firebase_auth import admin_init
+
+        admin_init.initialize_app()
+        client = get_client()
+
+        email = f"reclaim_{uuid.uuid4().hex[:10]}@demo.test"
+        uid = _create_user_with_role(email, SERVICING_MANAGER)
+        token = _mint_id_token(email)
+        before = fb_auth.get_user(uid).tokens_valid_after_timestamp or 0
+
+        # Build the retry ctx first so its key + request_hash match the crashed record.
+        ctx = _ctx(uid, OPERATIONS_USER)
+
+        # Simulate the crash state: (a) the Firebase claim was ALREADY lowered to
+        # OPERATIONS (the Phase-2 claim write had succeeded), and (b) the idempotency
+        # record is left PENDING with an EXPIRED lease and the ORIGINAL role
+        # (MANAGER) in recoveryContext — exactly what a crash between the claim write
+        # and finalize/complete leaves behind.
+        fb_auth.set_custom_user_claims(uid, {"role": OPERATIONS_USER})
+        now = datetime.now(timezone.utc)
+        client.collection("idempotencyKeys").document(ctx.idempotency_key).set({
+            "operation": OPERATION_ROLE,
+            "requestHash": ctx.request_hash,
+            "status": IdempotencyStatus.PENDING.value,
+            "entityType": ENTITY_USER,
+            "entityId": uid,
+            "leaseOwner": "crashed_run",
+            "leaseExpiresAt": now - timedelta(hours=1),  # expired -> reclaimable
+            "result": None,
+            "completedAt": None,
+            "expiresAt": now + timedelta(days=7),
+            "createdAt": now - timedelta(hours=1),
+            "recoveryContext": {"previousRole": SERVICING_MANAGER},
+        })
+
+        time.sleep(1.1)  # second-resolution validSince
+
+        # The retry reclaims the expired PENDING key. It must read
+        # recoveryContext.previousRole (MANAGER) — a demotion to OPERATIONS — and
+        # revoke, even though the LIVE claim already reads OPERATIONS.
+        result = set_user_role(uid=uid, role=OPERATIONS_USER, ctx=ctx, client=client)
+        self.assertEqual(result["role"], OPERATIONS_USER)
+        # The result/audit previousRole reflects the ORIGINAL role, not the lowered claim.
+        self.assertEqual(result["previousRole"], SERVICING_MANAGER)
+
+        after = fb_auth.get_user(uid).tokens_valid_after_timestamp or 0
+        self.assertGreater(after, before)  # the reclaim revoked
+        with self.assertRaises(fb_auth.RevokedIdTokenError):
+            fb_auth.verify_id_token(token, check_revoked=True)

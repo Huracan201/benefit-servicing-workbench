@@ -170,7 +170,14 @@ def reconcile_stuck_payments(payload: dict, ctx) -> dict:
         for contribution in page:
             _enqueue_reconcile(contribution.get("id"))
         pages += 1
-        if cursor is None or pages >= _MAX_PAGES:
+        if cursor is None:
+            break
+        if pages >= _MAX_PAGES:
+            logger.warning(
+                "reconcile-stuck-payments scan (a: PROCESSING) hit the %s-page cap; "
+                "remaining stuck contributions deferred to the next run (no silent cap)",
+                _MAX_PAGES,
+            )
             break
 
     # (b) collection-group STARTED-attempt safety net (specs/09 §9.4 scan b) — a
@@ -184,7 +191,14 @@ def reconcile_stuck_payments(payload: dict, ctx) -> dict:
         for attempt in page:
             _enqueue_reconcile(attempt.get("contributionId"))
         pages += 1
-        if cursor is None or pages >= _MAX_PAGES:
+        if cursor is None:
+            break
+        if pages >= _MAX_PAGES:
+            logger.warning(
+                "reconcile-stuck-payments scan (b: STARTED attempts) hit the %s-page cap; "
+                "remaining stale attempts deferred to the next run (no silent cap)",
+                _MAX_PAGES,
+            )
             break
 
     summary = {"job": "reconcile-stuck-payments", "enqueued": len(seen)}

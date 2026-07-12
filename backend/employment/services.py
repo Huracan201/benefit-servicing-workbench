@@ -444,6 +444,11 @@ def change_employment_status(
                 "agreementId": followup["agreement_id"],
                 "idempotencyKey": ctx.idempotency_key,
                 "commandResult": result,
+                # Carry the suspension anchor so shift-schedule stamps the same
+                # SCHEDULE_SHIFTED window metadata the benefit-command resume does
+                # (the shift amount itself comes from scheduleShiftMonths, so this
+                # is audit metadata only — a reaper re-drive without it stays correct).
+                "suspendedFrom": _iso_or_value(followup.get("suspended_from")),
             }
         else:  # pragma: no cover - defensive; _apply_cascade sets only the above
             task = None

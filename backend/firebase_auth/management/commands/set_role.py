@@ -64,19 +64,19 @@ class Command(BaseCommand):
         uid = user.uid
         previous_role = (user.custom_claims or {}).get("role")
 
-        # 2. Set the authoritative custom claim (preserve other claims).
         new_claims = dict(user.custom_claims or {})
         new_claims["role"] = role
-        try:
-            firebase_auth_sdk.set_custom_user_claims(uid, new_claims)
-        except Exception as exc:  # noqa: BLE001
-            raise CommandError(f"Failed to set custom claims for {uid}: {exc}")
 
-        # 2b. On a DEMOTION (strictly-lower target rank) revoke refresh tokens so the
-        # reduced privilege takes effect immediately — parity with the runtime
-        # set_user_role command and the write-path verify_id_token(check_revoked=True)
-        # (specs/12 §12.3). A promotion / lateral / first grant (previous_role None
-        # ranks -1) leaves existing sessions intact.
+        # 2. On a DEMOTION (strictly-lower target rank) revoke refresh tokens BEFORE
+        # mutating the claim, so the reduced privilege takes effect immediately
+        # (parity with the write-path verify_id_token(check_revoked=True), specs/12
+        # §12.3). Revoking first means a failure that forces a re-run still reads the
+        # ORIGINAL (higher) role as previous_role and re-revokes, instead of reading
+        # the already-lowered claim and silently skipping revocation. Revocation is
+        # idempotent; the sub-second window before the claim write is acceptable for
+        # a manual break-glass command (the runtime set_user_role persists the
+        # original role in its idempotency record to close the same gap). A promotion
+        # / lateral / first grant (previous_role None ranks -1) leaves sessions intact.
         demoted = role_rank(role) < role_rank(previous_role)
         if demoted:
             try:
@@ -85,6 +85,12 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"Failed to revoke refresh tokens for {uid}: {exc}"
                 )
+
+        # 3. Set the authoritative custom claim (preserve other claims).
+        try:
+            firebase_auth_sdk.set_custom_user_claims(uid, new_claims)
+        except Exception as exc:  # noqa: BLE001
+            raise CommandError(f"Failed to set custom claims for {uid}: {exc}")
 
         # 3. Upsert the users/{uid} mirror + 4. append the audit event, together.
         from common.firestore import get_client

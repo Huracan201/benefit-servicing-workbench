@@ -166,6 +166,9 @@ def set_user_role(
             entity_type=ENTITY_USER,
             lease_ttl_seconds=LEASE_TTL_SECONDS,
             lease_owner=ctx.lease_owner,
+            # Persist the pre-change role so a crash+retry re-drive revokes/audits
+            # against the ORIGINAL role, not the already-lowered live claim.
+            recovery_context={"previousRole": previous_role},
             client=client,
         )
         if outcome.is_replay:
@@ -180,7 +183,16 @@ def set_user_role(
             raise IdempotencyKeyReused(
                 "idempotency key reused with a different request"
             )
-        return ("PROCEED", None)
+        # PROCEED. On a reclaim the live claim may already reflect a prior attempt's
+        # write, so use the ORIGINAL role persisted on the record for the
+        # demotion/revoke decision + audit (specs/08 §8.3); a first attempt (no
+        # stored context) uses the live value.
+        effective_previous = previous_role
+        if outcome.reclaimed and outcome.existing:
+            stored = outcome.existing.get("recoveryContext") or {}
+            if "previousRole" in stored:
+                effective_previous = stored.get("previousRole")
+        return ("PROCEED", effective_previous)
 
     # --- Phase 3 (transaction): upsert the mirror + event + complete -----------
     def _phase3_finalize(txn: Any) -> dict:
@@ -224,9 +236,15 @@ def set_user_role(
         return result
 
     try:
-        kind, replay = transactional(client)(_phase1_begin)()
+        kind, phase1_value = transactional(client)(_phase1_begin)()
         if kind == "REPLAY":
-            return replay
+            return phase1_value
+        # PROCEED: adopt the effective pre-change role (the ORIGINAL persisted role
+        # on a reclaim, else the live value) for the Phase-2b demotion/revoke
+        # decision and the Phase-3 audit event — closes the crash+retry revocation
+        # gap so a re-drive never skips revocation by re-reading the lowered claim.
+        previous_role = phase1_value
+        result["previousRole"] = previous_role
 
         # --- Phase 2 (NO transaction): set the authoritative Firebase claim ----
         # Proceed path only (a NEW outcome) — never on replay, so the claim is not

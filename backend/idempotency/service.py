@@ -166,6 +166,7 @@ def begin(
     lease_ttl_seconds: int,
     entity_type: Optional[str] = None,
     lease_owner: Optional[str] = None,
+    recovery_context: Optional[dict] = None,
     client: Any = None,
 ) -> Outcome:
     """Open (or replay) an idempotency record inside the caller's transaction.
@@ -262,6 +263,7 @@ def begin(
         txn, ref, key=key, operation=operation, request_hash=request_hash,
         entity_id=entity_id, entity_type=entity_type, owner=owner,
         lease_ttl_seconds=lease_ttl_seconds, overwrite=False,
+        recovery_context=recovery_context,
     )
     return Outcome(state=BeginState.NEW, reclaimed=False, lease_owner=owner)
 
@@ -279,8 +281,15 @@ def _write_pending(
     lease_ttl_seconds: int,
     overwrite: bool,
     previous: Optional[dict] = None,
+    recovery_context: Optional[dict] = None,
 ) -> None:
-    """Write a PENDING record. ``overwrite=False`` uses a create-precondition."""
+    """Write a PENDING record. ``overwrite=False`` uses a create-precondition.
+
+    ``recovery_context`` is optional caller-supplied data (e.g. the pre-change
+    role for a demotion) stored on the record so a crash+retry re-drive can make
+    the SAME decision as the original request rather than reading already-mutated
+    live state (specs/08 §8.3); it is preserved verbatim across a reclaim.
+    """
     from google.cloud import firestore  # lazy import
 
     lease_expires = _now() + timedelta(seconds=lease_ttl_seconds)
@@ -298,13 +307,20 @@ def _write_pending(
         "updatedAt": firestore.SERVER_TIMESTAMP,
     }
     if overwrite:
-        # Reclamation: preserve original createdAt, bump updatedAt/lease.
+        # Reclamation: preserve original createdAt + recoveryContext (carry the
+        # original request context forward so a re-drive decides as the original
+        # request did), bump updatedAt/lease.
         data["createdAt"] = (previous or {}).get("createdAt") or firestore.SERVER_TIMESTAMP
+        prev_ctx = (previous or {}).get("recoveryContext")
+        if prev_ctx is not None:
+            data["recoveryContext"] = prev_ctx
         txn.set(ref, data)
     else:
         # First attempt: create-precondition (fails at commit if it now exists),
         # the atomic "first request wins" guarantee (specs/08 §8.2).
         data["createdAt"] = firestore.SERVER_TIMESTAMP
+        if recovery_context is not None:
+            data["recoveryContext"] = recovery_context
         txn.create(ref, data)
 
 
