@@ -3,7 +3,7 @@
 **Project:** BenefitServicing Workbench (`Huracan201/benefit-servicing-workbench`)
 **Phase:** 3 — Async workflows (Cloud Tasks + Scheduler) + read-model projections + the deferred security prerequisites ([specs/19 §19.2](../19-delivery-and-scope.md))
 **Scope:** the `/internal` task/scheduler surface + `enqueue()` seam · resumable schedule generation · process-contribution + the scheduler fan-out · the reconciliation sweeper + lease reaper · the read-model projection layer · rate-limiting / revoke-on-demotion / input-validation / `due()` pagination
-**Status:** ✅ Built & QA-verified across 3 slices — Slices A+B merged to `release/phase-3` (CI green), Slice C pending commit → CI. On draft **PR #5**.
+**Status:** ✅ Merged to `main` (`b68fc6f`, PR #5) — 3 slices, CI green on the real emulator + CodeRabbit reviewed and addressed.
 **Date:** 2026-07-12
 
 ---
@@ -135,7 +135,7 @@ All found by per-slice adversarial QA; all fixed and lead-verified unless marked
 - **`reconcile` INDETERMINATE escalation** bumps `openExceptionCount` without a projection nudge — the open-exception tiles reconcile on the `*/15` rebuild.
 - **`scheduledCents` per-period refresh** is owned by `rebuild-summaries`, not per-event fanout (a single activation spans many periods the event can't enumerate).
 - **`U12` (queue/scheduler provisioning + readiness flip)** and **`U13` (propagate-denormalized)** are out of this phase — the former is deploy-only + cloud-verified; the latter awaits its producer command.
-- **CodeRabbit has not reviewed Phase 3 yet** — it is configured to skip draft PRs; the review runs when PR #5 is marked ready.
+- **CodeRabbit review (on PR #5, once un-drafted) was addressed** — 2 Major (the revoke-on-demotion crash+retry gap, closed by persisting the pre-change role in the idempotency record + reordering the `set_role` CLI, with a crash-reclaim test) and 2 Minor fixed; ~8 Trivial nitpicks (helper de-duplication, test-fixture cleanup, full-scan scaling watch-items) acknowledged for a later pass, not blocking.
 
 ---
 
