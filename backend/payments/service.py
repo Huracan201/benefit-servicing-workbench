@@ -50,6 +50,7 @@ from common.enums import (
     BenefitStatus,
     ContributionStatus,
     EmploymentStatus,
+    ExceptionStatus,
     LoanStatus,
     PaymentAttemptStatus,
     PaymentFailureCode,
@@ -187,6 +188,28 @@ def _event_common(contribution: dict) -> dict:
     }
 
 
+def _exception_is_open(txn, client, exception_id: Optional[str]) -> bool:
+    """True iff ``exception_id`` names an exception still OPEN/IN_REVIEW.
+
+    Read inside the finalize txn (before any write) so the payment success /
+    settle-then-cancel paths auto-resolve/dismiss + decrement
+    ``openExceptionCount`` ONLY for an exception that is still open. They must
+    never re-close (and overwrite the resolution of) one an operator already
+    manually resolved/dismissed, nor double-decrement the count for a decrement
+    that manual path already applied (specs/09 §9.3). A missing/None id or a
+    vanished doc reads as not-open (skip).
+    """
+    if not exception_id:
+        return False
+    from repositories import operational_exceptions
+
+    exc = _get_in_txn(txn, operational_exceptions.ref(client, exception_id))
+    return exc is not None and exc.get("status") in (
+        str(ExceptionStatus.OPEN),
+        str(ExceptionStatus.IN_REVIEW),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Phase 3 — shared finalize transactions (used by process AND reconcile)
 # --------------------------------------------------------------------------- #
@@ -275,6 +298,12 @@ def finalize_success(
     ev = _event_common(contribution)
     period = contribution.get("periodLabel") or period_label(_now_dt())
     had_exception = contribution.get("currentExceptionId")
+    # Only auto-resolve + decrement the count if the coupled exception is STILL
+    # open. An operator may have manually resolved/dismissed it first (recording
+    # attribution + already decrementing openExceptionCount); re-resolving would
+    # overwrite that resolution and double-decrement. Read before any write; the
+    # contribution pointer clear below stays unconditional (harmless).
+    exception_open = _exception_is_open(txn, client, had_exception)
 
     # -- writes -------------------------------------------------------------
     # Attempt STARTED -> SUCCEEDED (terminal; specs/06 §6.2).
@@ -322,7 +351,7 @@ def finalize_success(
         loan_update["loanStatus"] = str(LoanStatus.PAID_OFF)
     if complete_benefit:
         loan_update["benefitStatus"] = str(BenefitStatus.COMPLETED)
-    if had_exception:
+    if had_exception and exception_open:
         loan_update["openExceptionCount"] = max(0, int(loan.get("openExceptionCount", 0)) - 1)
     stamp_update(loan_update, ctx.actor_id)
     txn.update(loans.ref(client, loan_id), loan_update)
@@ -435,8 +464,10 @@ def finalize_success(
             **_event_common(inst),
         )
 
-    # Resolve the coupled exception (pointer-based; specs/09 §9.3).
-    if had_exception:
+    # Resolve the coupled exception (pointer-based; specs/09 §9.3) — but ONLY if
+    # it is still open, so a payment success never overwrites an operator's manual
+    # resolution (the count decrement above is gated identically).
+    if had_exception and exception_open:
         exceptions_service.resolve(txn, client, had_exception, resolved_by_event_id=posted_event_id)
 
     result = {
@@ -493,6 +524,10 @@ def finalize_failure(
     terminated = benefit.get("status") == str(BenefitStatus.TERMINATED)
     failure_code_str = str(failure_code) if failure_code is not None else None
     had_exception = contribution.get("currentExceptionId")
+    # Gate the settle-then-cancel dismiss + count decrement on the exception being
+    # STILL open (read before any write) — never overwrite an operator's manual
+    # resolution or double-decrement openExceptionCount (specs/09 §9.3).
+    exception_open = _exception_is_open(txn, client, had_exception)
     now = _server_ts()
     seq = _Seq(seq_start)
     ev = _event_common(contribution)
@@ -520,11 +555,14 @@ def finalize_failure(
             "failureReason": failure_reason,
         }
         if had_exception:
-            exceptions_service.dismiss(txn, client, had_exception, reason="benefit terminated")
+            # Clear the pointer regardless; only DISMISS + decrement when the
+            # exception is still open (don't re-close an operator's resolution).
             contrib_update["currentExceptionId"] = None
+            if exception_open:
+                exceptions_service.dismiss(txn, client, had_exception, reason="benefit terminated")
         stamp_update(contrib_update, ctx.actor_id)
         txn.update(contributions.ref(client, contribution_id), contrib_update)
-        if had_exception:
+        if had_exception and exception_open:
             loan_update = {
                 "openExceptionCount": max(0, int(loan.get("openExceptionCount", 0)) - 1)
             }
@@ -714,6 +752,9 @@ def finalize_not_submitted(
 
     terminated = benefit.get("status") == str(BenefitStatus.TERMINATED)
     had_exception = contribution.get("currentExceptionId")
+    # Gate the terminated-branch dismiss + count decrement on the exception being
+    # STILL open (read before any write) — same rationale as the other finalizes.
+    exception_open = _exception_is_open(txn, client, had_exception)
     now = _server_ts()
     seq = _Seq(seq_start)
     ev = _event_common(contribution)
@@ -741,11 +782,14 @@ def finalize_not_submitted(
             "failureReason": "Benefit terminated; unsubmitted charge canceled",
         }
         if had_exception:
-            exceptions_service.dismiss(txn, client, had_exception, reason="benefit terminated")
+            # Clear the pointer regardless; only DISMISS + decrement when still
+            # open (don't re-close an operator's manual resolution).
             contrib_update["currentExceptionId"] = None
+            if exception_open:
+                exceptions_service.dismiss(txn, client, had_exception, reason="benefit terminated")
         stamp_update(contrib_update, ctx.actor_id)
         txn.update(contributions.ref(client, contribution_id), contrib_update)
-        if had_exception:
+        if had_exception and exception_open:
             loan_update = {
                 "openExceptionCount": max(0, int(loan.get("openExceptionCount", 0)) - 1)
             }

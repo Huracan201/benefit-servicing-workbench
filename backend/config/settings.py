@@ -79,6 +79,9 @@ INSTALLED_APPS = [
     "payments",
     "benefits",
     "contributions",
+    "notes",
+    "administration",
+    "employment",
     "seed",
 ]
 

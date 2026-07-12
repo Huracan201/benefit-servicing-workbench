@@ -206,12 +206,23 @@ def resolve(write, client, exception_id: str, *, resolved_by_event_id: str) -> N
     )
 
 
-def dismiss(write, client, exception_id: str, *, reason: str) -> None:
+def dismiss(
+    write,
+    client,
+    exception_id: str,
+    *,
+    reason: str,
+    resolved_by: Optional[str] = None,
+    resolved_by_event: Optional[str] = None,
+) -> None:
     """Mark ``exception_id`` DISMISSED with ``reason`` (stored on the note).
 
-    Used when the underlying condition no longer applies — e.g. cancelling a
-    FAILED contribution on a TERMINATED agreement dismisses its open exception
-    so cancellation never orphans one (specs/09 §9.3).
+    ``resolved_by`` / ``resolved_by_event`` capture the operator and the
+    ``EXCEPTION_DISMISSED`` event when a human dismisses from the workbench
+    (specs/06 §6.4, specs/04 §4.12a). The automation cancel path — cancelling a
+    FAILED contribution on a TERMINATED agreement so cancellation never orphans
+    an open exception (specs/09 §9.3) — leaves both ``None``: the dismissal is
+    system-driven with no operator attribution.
     """
     _terminate(
         write,
@@ -219,8 +230,8 @@ def dismiss(write, client, exception_id: str, *, reason: str) -> None:
         exception_id,
         status=ExceptionStatus.DISMISSED,
         resolution={
-            "resolvedBy": None,
+            "resolvedBy": resolved_by,
             "note": reason,
-            "resolvedByEvent": None,
+            "resolvedByEvent": resolved_by_event,
         },
     )
