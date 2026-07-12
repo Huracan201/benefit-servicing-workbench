@@ -8,7 +8,16 @@ fail-closed :class:`~firebase_auth.middleware.InternalOIDCMiddleware` (specs/12
 * ``POST /internal/tasks/<task>`` — one Cloud Tasks unit of work.
 * ``POST /internal/jobs/<job>``   — one Cloud Scheduler job.
 
-The ``noop`` task/job (registered in ``internal.enqueue``) prove the round-trip.
+The ``<task>`` / ``<job>`` captures dispatch by name against the
+:data:`internal.enqueue.TASK_HANDLERS` / :data:`~internal.enqueue.SCHEDULER_JOBS`
+registries, so a single route serves every registered name (an unknown name is a
+clean 404 in :func:`internal.views._dispatch`, not a routing miss). The names in
+play (registered at :mod:`internal.enqueue` import):
+
+* tasks — ``generate-schedule``, ``process-contribution``, ``reconcile-contribution``,
+  ``cancel-future-contributions``, ``shift-schedule`` (+ the ``noop`` round-trip);
+* jobs — ``enqueue-due-contributions``, ``reconcile-stuck-payments``,
+  ``reap-expired-leases`` (+ ``noop``).
 """
 
 from __future__ import annotations

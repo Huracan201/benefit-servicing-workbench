@@ -7,10 +7,13 @@ auth), enforces the role, builds the :class:`commands.base.CommandContext`
 :func:`benefits.services.activate_benefit`, and maps a
 :class:`commands.base.CommandError` to the specs/11 §11.3 response.
 
-For Phase 2 the schedule is generated inline, so a successful activation returns
-``200`` with the now-``ACTIVE`` agreement (specs/10 §10.1 — "inline is fine to
-return 200"). An in-progress same-key replay still yields ``202`` with a
-``Retry-After`` hint.
+The command hands its follow-up (schedule generation on activate; schedule-shift
+on resume; cancel-future on terminate) onto an async task (COMPLETION PROTOCOL,
+Decision A). Under ``TASK_EXECUTION_MODE=inline`` (CI + the emulator) the task
+runs synchronously and the command returns ``200``; under ``cloud`` the task is
+deferred and the command raises :class:`OperationInProgress`, which
+:func:`_respond` renders as ``202`` + ``Retry-After`` (the client polls the same
+idempotency key). An in-progress same-key replay likewise yields ``202``.
 """
 
 from __future__ import annotations
@@ -69,9 +72,11 @@ def _build_ctx(request: Request, correlation_id):
 def _respond(command, agreement_id: str, ctx) -> Response:
     """Invoke ``command(agreement_id, ctx)`` and map the result/CommandError.
 
-    A success is ``200`` with the command body; an in-progress replay is ``202``
-    with a ``Retry-After`` header; any other :class:`CommandError` is the typed
-    specs/11 §11.3 envelope at its HTTP status.
+    A success (inline follow-up) is ``200`` with the command body; a deferred
+    follow-up (cloud) or an in-progress same-key replay surfaces as
+    :class:`OperationInProgress` → ``202`` with a ``Retry-After`` header; any
+    other :class:`CommandError` is the typed specs/11 §11.3 envelope at its HTTP
+    status.
     """
     try:
         result = command(agreement_id=agreement_id, ctx=ctx)
