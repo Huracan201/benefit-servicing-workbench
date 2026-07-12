@@ -116,10 +116,13 @@ jobs:
         working-directory: backend
         run: python manage.py test --tag=unit
       - name: Emulator integration tests (transactions, idempotency gate, reconciliation, rules)
+        # `cd backend` inside the exec shell so Django's test discovery starts from the
+        # project root (backend/ isn't a Python package, so running from the repo root
+        # discovers 0 tests — a false green). FIRESTORE_EMULATOR_HOST is inherited.
         run: >
           firebase emulators:exec --project=${{ env.DEMO_PROJECT }}
           --config firebase/firebase.json
-          "python backend/manage.py test --tag=emulator"
+          "cd backend && python manage.py test --tag=emulator"
 
   frontend:
     name: Frontend (lint + unit + build)

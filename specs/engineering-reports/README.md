@@ -1,0 +1,12 @@
+# Engineering Reports
+
+Per-phase engineering reports for the BenefitServicing Workbench — what was built, how it was verified, issues found and fixed, and key decisions. One report per delivery phase ([specs/19](../19-delivery-and-scope.md)).
+
+| Phase | Report | Status |
+|-------|--------|--------|
+| 1 — Foundation | [phase-1-foundation.md](./phase-1-foundation.md) | ✅ Complete (merged `1261b56`) |
+| 2 — Domain command layer (part 1) | [phase-2-command-layer.md](./phase-2-command-layer.md) | ✅ Built & QA-verified; pending CI + merge |
+| 2 — remaining commands | _pending_ | Next slice (suspend/terminate/employment/exceptions/notes) |
+| 3 — Async workflows | _pending_ | Not started |
+
+These are point-in-time records; the authoritative design is always `specs/`.

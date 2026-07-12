@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-This is the spec-driven **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **Phase 1 foundation is scaffolded** (specs/19); business logic (commands, tasks, screens) is Phase 2+ and largely not built yet.
+This is the spec-driven **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **Phase 1 (foundation) is merged; Phase 2 part 1 (the domain command layer — activation + the two-phase payment) is built on `release/phase-2`.** Async workers (Phase 3) and real screens (Phase 4) are not built yet.
 
 What exists today:
-- `specs/` — 22 numbered spec docs + `21-deployment-and-operations.md` + `openapi.yaml` (the authoritative API contract) + `wireframes.html`. Start at [`specs/README.md`](specs/README.md) — the index, reading order, and normative global conventions. `appendix-a` (v1→v2) and `appendix-b` (v2→v2.1 audit) trace the review history.
+- `specs/` — 22 numbered spec docs + `21-deployment-and-operations.md` + `openapi.yaml` (the authoritative API contract) + `wireframes.html`. Start at [`specs/README.md`](specs/README.md) — the index, reading order, and normative global conventions. `appendix-a`/`appendix-b` trace the spec review history; [`specs/engineering-reports/`](specs/engineering-reports/) records each phase's build + QA.
 - `firebase/` — deployable Firestore rules + indexes, emulator config, and a **passing** security-rules test suite (TS/Vitest, 12 tests).
-- `backend/` — **Phase 1 Django scaffold.** Lean DRF project (`config/`), Firestore-only (no ORM). The safety-critical, **framework-free** core is `backend/common/` (money/residual solver, periods, deterministic ids, state machines, invariants, enums) with **57 passing stdlib unit tests**. `firebase_auth/` (token auth + role perms + `/internal` OIDC middleware + `set_role`), `core/` (health/readiness, correlation-id + JSON logging, `schema.py` doc TypedDicts). Business command/task endpoints are **not** built yet (reserved `/api/v1`, `/internal` in `config/urls.py`).
+- `backend/` — Django (Firestore-only, no ORM).
+  - **Phase 1 (merged):** `common/` — the safety-critical, **framework-free** core (money/residual solver, periods, deterministic ids, state machines, invariants, enums) with **60 passing stdlib unit tests**; `config/`, `firebase_auth/` (token auth + role perms + `/internal` OIDC + `set_role`), `core/` (health/readiness, correlation-id + JSON logging, `schema.py` doc TypedDicts).
+  - **Phase 2 part 1 (on `release/phase-2`):** the **command layer** — `repositories/` (Firestore gateways), `commands/base` + `idempotency/` (create-in-txn idempotency + lease), `servicing/` (immutable events + mirror), `exceptions/` (deterministic upsert), `payments/` (two-phase payment + fencing adapter + reconcile), `benefits/` (activation), `contributions/`, `seed/` (`seed_demo`), `api/` (`/api/v1` activate/process/retry). Emulator integration tests (concurrency, fencing, crash-recovery) + `@tag('unit')` command tests. **Deferred to the next slice:** suspend/terminate/employment cascade, exception workflow, notes, admin commands (foundation for them is in place).
 - `frontend/` — **Phase 1 Next.js scaffold** (App Router + TS + Tailwind): emulator-aware Firebase client, `useDocument`/`useCollectionPage` hooks, typed enums mirroring the backend, app shell + stub screens + one smoke test. Screens are stubs (Phase 4).
-- `.github/workflows/ci.yml` + `.spectral.yaml` — CI: a `detect` job gates the backend/frontend/e2e jobs on file presence; backend + frontend are now **active**.
+- `.github/workflows/ci.yml` + `.spectral.yaml` — CI: a `detect` job gates the backend/frontend/e2e jobs on file presence; backend + frontend are **active** (the emulator step `cd backend` so Django discovers the tests).
 
-Phase 1 is foundation only — do not expect runnable business workflows yet. Next work is [specs/19](specs/19-delivery-and-scope.md) Phase 2 (domain commands).
+Next work is [specs/19](specs/19-delivery-and-scope.md): the remaining Phase-2 commands, then Phase 3 (Cloud Tasks/Scheduler + projections).
 
 ## Commands that work today
 
@@ -42,7 +44,7 @@ The `common/` core is deliberately dependency-free so it runs offline; the rest 
 - `firebase.json` lives **inside `firebase/`** (not the repo root) — run `firebase` from that directory or pass `--config firebase/firebase.json`.
 - Rules and indexes are the **source of truth**; never edit them in the Firebase console. Deploy with `firebase deploy --only firestore:rules,firestore:indexes`.
 
-**Once app code lands** (per specs/19 & specs/02 §2.5): backend is Django (`python manage.py test --tag=unit|emulator`, Cloud Run); frontend is Next.js (`npm run dev|build|test`, Vitest + Playwright). The CI (`ci.yml`) already defines these jobs, gated on a file-existence `detect` job so they activate automatically when the directories appear.
+**Backend/frontend (verified on CI, which has network):** backend Django — `python manage.py check`, `python manage.py test --tag=unit` (pure), and the emulator step `firebase emulators:exec --project=demo-benefitservicing-workbench --config firebase/firebase.json "cd backend && python manage.py test --tag=emulator"` (activation, the two-phase payment, concurrency + fencing gates); frontend Next.js — `npm run lint|test|build`. The `detect` job gates these on file presence, so they activate as directories appear. The offline sandbox can only run the framework-free `common/` suite locally (above).
 
 ## Architecture (the load-bearing ideas)
 
