@@ -57,7 +57,7 @@ class EmploymentStatusView(APIView):
         user = request.user
         ctx = CommandContext.build(
             actor_id=getattr(user, "uid", ""),
-            actor_role=getattr(user, "role", None),
+            actor_role=getattr(user, "role", None) or "",
             actor_name=_actor_name(user),
             method="POST",
             path=request.path,

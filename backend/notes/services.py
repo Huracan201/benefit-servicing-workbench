@@ -86,6 +86,8 @@ def add_note(
     :class:`commands.base.CommandError` subclass on any precondition/idempotency
     failure, which the view maps to the specs/11 §11.3 HTTP response.
     """
+    if text is not None and not isinstance(text, str):
+        raise Unprocessable("note text must be a string")
     cleaned = (text or "").strip()
     if not cleaned:
         # Defensive: the view already rejects empty text with a 400. Any caller

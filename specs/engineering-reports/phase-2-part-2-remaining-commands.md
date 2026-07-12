@@ -57,7 +57,7 @@ Every command mirrors the part-1 reference patterns (`activate_benefit` idempote
 
 **The crash-gap hardening (the load-bearing change).** The lifecycle commands do a bounded core transaction (the status change) followed by *unbounded* post-commit work (cancel N contributions / shift N installments). Completing idempotency in the core transaction meant a replay skipped the tail — so a transient error mid-tail was unrecoverable. The fix moves to a **two-phase-complete envelope**:
 
-```
+```text
 core txn (transition; idempotency stays PENDING) → commit → inline tail → complete-key txn
 ```
 

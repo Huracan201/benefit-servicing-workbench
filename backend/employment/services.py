@@ -38,7 +38,7 @@ so a replay returns the stored result and skips re-running them.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from commands.base import (
@@ -185,6 +185,14 @@ def change_employment_status(
         client = get_client()
 
     new_status = _validate_status(status)
+    # effective_date is stamped as employmentEndDate on TERMINATED — validate it is
+    # a date-ish value (None / ISO string / date / datetime) before it's persisted,
+    # so a malformed body can't write junk into the audit field.
+    if effective_date is not None and not isinstance(effective_date, (str, date, datetime)):
+        raise ValidationError(
+            "effective_date must be an ISO date string or omitted",
+            code="INVALID_EFFECTIVE_DATE",
+        )
     now = _now_local()
 
     # Discover the loan + active agreement outside the txn (work list only; the
@@ -306,12 +314,9 @@ def change_employment_status(
             cascade_followup = cascade.get("followup")
         else:
             # Reclaim: the cascade already committed on the original call; the
-            # agreement's committed status determines which idempotent tail to
-            # re-drive (cancel-future / shift / none).
-            cascade_summary = {
-                "applied": False,
-                "reason": "reclaimed; cascade already committed",
-            }
+            # agreement's committed status determines both what the cascade DID
+            # (for the response/audit) and which idempotent tail to re-drive.
+            cascade_summary = _reclaim_cascade_summary(new_status, agreement)
             cascade_followup = _reclaim_cascade_followup(new_status, agreement)
 
         result = {
@@ -426,6 +431,42 @@ def _apply_cascade(
             now=now,
         )
     return {"summary": {"applied": False, "reason": "no cascade for status"}, "followup": None}
+
+
+def _reclaim_cascade_summary(
+    new_status: str, agreement: Optional[dict]
+) -> dict:
+    """Reconstruct the benefit-cascade summary on a reclaim from committed state.
+
+    The original ``_apply_cascade`` summary was never persisted (the key is kept
+    PENDING across the commit->tail boundary), so on a same-key reclaim we rebuild
+    it from the agreement's *committed* status — which reflects what the cascade
+    actually did — rather than reporting a hardcoded no-op that would make the
+    API/audit trail lie about a benefit that really was suspended/terminated/resumed.
+    """
+    if agreement is None:
+        return {"applied": False, "reason": "no active benefit agreement"}
+    current = agreement.get("status")
+    if (
+        new_status == EmploymentStatus.TERMINATED.value
+        and current == BenefitStatus.TERMINATED.value
+    ):
+        return {"applied": True, "action": "TERMINATED"}
+    if (
+        new_status == EmploymentStatus.LEAVE.value
+        and current == BenefitStatus.SUSPENDED.value
+    ):
+        return {
+            "applied": True,
+            "action": "SUSPENDED",
+            "suspendedReason": agreement.get("suspendedReason"),
+        }
+    if (
+        new_status == EmploymentStatus.ACTIVE.value
+        and current == BenefitStatus.ACTIVE.value
+    ):
+        return {"applied": True, "action": "RESUMED"}
+    return {"applied": False, "reason": "cascade was a no-op (benefit already at/past target)"}
 
 
 def _reclaim_cascade_followup(

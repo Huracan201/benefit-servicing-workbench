@@ -95,7 +95,9 @@ def set_user_role(
     set only on a ``NEW`` outcome (never on replay); Phase 3 writes the mirror +
     event and completes the record.
     """
-    role = (role or "").strip()
+    if not isinstance(role, str):
+        raise ValidationError("role must be a string", code="INVALID_ROLE")
+    role = role.strip()
     if role not in ROLE_ORDER:
         raise ValidationError(
             f"invalid role {role!r}; must be one of: {', '.join(ROLE_ORDER)}",
@@ -229,12 +231,14 @@ def set_user_role(
         # re-asserts the same claim before Phase 3 re-runs.
         try:
             firebase_auth_sdk.set_custom_user_claims(uid, new_claims)
-        except Exception as exc:  # noqa: BLE001
-            raise from_domain_error(
-                domain_errors.DomainError(
-                    f"failed to set custom claims for {uid!r}: {exc}"
-                )
+        except ValueError as exc:
+            # Invalid claims payload — a client/input problem -> 400.
+            raise ValidationError(
+                f"invalid claims for {uid!r}: {exc}", code="INVALID_CLAIMS"
             ) from exc
+        # A FirebaseError / transient Auth outage is a backend failure: let it
+        # propagate as a retryable 5xx rather than masking it as a 409 (a wrapped
+        # DomainError). specs/16: don't turn outages into client-error codes.
 
         return transactional(client)(_phase3_finalize)()
     except CommandError:
