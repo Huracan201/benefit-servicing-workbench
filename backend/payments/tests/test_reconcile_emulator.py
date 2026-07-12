@@ -29,7 +29,14 @@ from payments.adapter import (
     crash_after_charge,
 )
 from payments.tests import fixtures
-from repositories import refs
+from projections import recompute
+from repositories import employer_summaries, refs
+
+
+def _strip_readmodel(doc: dict) -> dict:
+    """Drop the gateway/get extras (``id``, ``updatedAt``) so a stored read-model
+    doc can be compared field-for-field against the pure recompute output."""
+    return {k: v for k, v in doc.items() if k not in ("id", "updatedAt")}
 
 EMULATOR = bool(os.environ.get("FIRESTORE_EMULATOR_HOST"))
 
@@ -100,6 +107,70 @@ class ReconcileAfterCrashTests(SimpleTestCase):
             .where(filter=refs.field_filter("eventType", "==", "PAYMENT_RECONCILED"))
         )
         self.assertEqual(len(reconciled_events), 1)
+
+    def test_reconcile_recovered_posting_updates_employer_and_period_rollups(self):
+        """A crash-recovered ``POSTED`` payment must nudge the SAME projection key
+        set a normal posting does — the reconcile finalize's projection-fanout gap
+        (specs/05 §5.2, finding 2).
+
+        Under the emulator ``TASK_EXECUTION_MODE`` is inline, so
+        ``reconcile_contribution`` runs every ``update-projection`` nudge
+        synchronously; after recovery the employer + employer-period rollups reflect
+        the posting. Without the fix the reconcile finalize posts money but fans out
+        nothing, so the summary docs never appear (they stay stale until
+        rebuild-summaries). The Phase-2 crash below dies before any nudge, so no
+        summary can pre-exist this reconcile.
+        """
+        client = get_client()
+        key = fixtures.unique_key("recproj")
+        g = fixtures.seed_payment_graph(
+            client,
+            key,
+            total_commitment_cents=1_000_000,
+            scheduled_amount_cents=100_000,
+            loan_balance_cents=2_000_000,
+        )
+        cid = g.contribution_id(1)
+        period = g.contribution(1)["periodLabel"]
+        ctx = fixtures.make_ctx(f"proc_{key}", path=f"/contributions/{cid}/process")
+        adapter = SimulatedPaymentAdapter(client)
+
+        # Clean up the (uniquely-scoped) read-model docs the fanout writes.
+        self.addCleanup(employer_summaries.ref(client, g.employer_id).delete)
+        self.addCleanup(
+            employer_summaries.period_ref(client, g.employer_id, period).delete
+        )
+
+        # Phase-2 crash: charge persists, process dies before finalize (and before
+        # any projection nudge) — the contribution is stuck PROCESSING.
+        with crash_after_charge():
+            with self.assertRaises(SimulatedCrash):
+                service.process_contribution(cid, ctx, client=client, adapter=adapter)
+
+        # Sweeper recovers → POSTED, and (the fix) fans out the read-model recompute.
+        result = reconcile_contribution(cid, client=client, adapter=adapter)
+        self.assertEqual(result["status"], str(ContributionStatus.POSTED))
+
+        # --- employerSummaries/{emp}: the recovered posting rolled up. ----------
+        es = employer_summaries.get(client, g.employer_id)
+        self.assertIsNotNone(
+            es, "reconcile-recovered posting must nudge the employer rollup"
+        )
+        self.assertEqual(es["amountPaidCents"], 100_000)
+        self.assertEqual(
+            _strip_readmodel(es), recompute.recompute_employer(client, g.employer_id)
+        )
+
+        # --- employerSummaries/{emp}/periods/{period}: postedCents bucketed. -----
+        period_doc = employer_summaries.get_period(client, g.employer_id, period)
+        self.assertIsNotNone(
+            period_doc, "reconcile-recovered posting must nudge the period rollup"
+        )
+        self.assertEqual(period_doc["postedCents"], 100_000)
+        self.assertEqual(
+            _strip_readmodel(period_doc),
+            recompute.recompute_employer_period(client, g.employer_id, period),
+        )
 
 
 @tag("emulator")

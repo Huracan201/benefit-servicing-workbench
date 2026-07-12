@@ -94,6 +94,9 @@ INSTALLED_APPS = [
     "seed",
     # Phase 3 — async infrastructure foundation (specs/14, specs/21 §21.5).
     "internal",
+    # Phase 3 — read-model projection layer (specs/05): the recompute engine +
+    # fanout behind the update-projection task and the rebuild-summaries job.
+    "projections",
 ]
 
 MIDDLEWARE = [

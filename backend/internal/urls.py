@@ -15,9 +15,11 @@ clean 404 in :func:`internal.views._dispatch`, not a routing miss). The names in
 play (registered at :mod:`internal.enqueue` import):
 
 * tasks — ``generate-schedule``, ``process-contribution``, ``reconcile-contribution``,
-  ``cancel-future-contributions``, ``shift-schedule`` (+ the ``noop`` round-trip);
+  ``cancel-future-contributions``, ``shift-schedule``, ``update-projection``
+  (+ the ``noop`` round-trip);
 * jobs — ``enqueue-due-contributions``, ``reconcile-stuck-payments``,
-  ``reap-expired-leases`` (+ ``noop``).
+  ``reap-expired-leases``, ``rebuild-summaries``, ``reset-demo``,
+  ``expire-idempotency-keys`` (+ ``noop``).
 """
 
 from __future__ import annotations

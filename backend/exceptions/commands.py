@@ -424,6 +424,7 @@ def resolve_exception(
     exception is loan-scoped — decrements the loan's ``openExceptionCount``.
     """
     client = _client_default(client)
+    scope: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -499,9 +500,13 @@ def resolve_exception(
             "correlationId": ctx.correlation_id,
         }
         idempotency.complete(txn, ctx.idempotency_key, result, client=client)
+        scope.update({"loan_id": loan_id, "employer_id": exc.get("employerId")})
         return result
 
-    return _dispatch(_run)
+    result = _dispatch(_run)
+    # POST-COMMIT: nudge the open-exception counter recompute (off the txn, §5.1).
+    _nudge_projections(ctx, "EXCEPTION_RESOLVED", scope)
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -521,6 +526,7 @@ def dismiss_exception(
     the loan's ``openExceptionCount``.
     """
     client = _client_default(client)
+    scope: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -593,9 +599,13 @@ def dismiss_exception(
             "correlationId": ctx.correlation_id,
         }
         idempotency.complete(txn, ctx.idempotency_key, result, client=client)
+        scope.update({"loan_id": loan_id, "employer_id": exc.get("employerId")})
         return result
 
-    return _dispatch(_run)
+    result = _dispatch(_run)
+    # POST-COMMIT: nudge the open-exception counter recompute (off the txn, §5.1).
+    _nudge_projections(ctx, "EXCEPTION_DISMISSED", scope)
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -616,3 +626,30 @@ def _dispatch(run) -> dict:
         raise
     except DomainError as exc:
         raise from_domain_error(exc) from exc
+
+
+def _nudge_projections(ctx: CommandContext, event_type: str, scope: dict) -> None:
+    """POST-COMMIT: fan out the read-model recompute for an exception close.
+
+    Call only AFTER the transaction commits, on the real (non-replay) path — never
+    inside a transaction (specs/05 §5.1 hot-doc rule). Resolving/dismissing an
+    exception decrements the open-exception counters on ``portfolioSummaries`` and
+    (when scoped) the employer + loan mirrors; the fanout materialises only the
+    keys whose id is present on ``scope`` (a loan-scoped exception → loan_workbench;
+    an employer-scoped one → employer). Best-effort — the scheduled rebuild is the
+    backstop, so the fanout swallows its own errors. Skipped when ``scope`` is empty
+    (a replay never populates it).
+    """
+    if not scope:
+        return
+    from projections.fanout import enqueue_for_event
+
+    enqueue_for_event(
+        {
+            "eventType": event_type,
+            "loanId": scope.get("loan_id"),
+            "employerId": scope.get("employer_id"),
+            "metadata": {},
+        },
+        ctx=ctx,
+    )

@@ -76,6 +76,29 @@ from servicing import events as servicing_events
 OPERATION = "activate-benefit"
 ENTITY_TYPE = "BENEFIT_AGREEMENT"
 
+
+def _nudge_projections(ctx: CommandContext, event_type: str, *, loan_id, employer_id) -> None:
+    """POST-COMMIT: fan out the read-model recompute for a benefit-lifecycle change.
+
+    Call only AFTER the core transaction commits, on the real (non-replay) path —
+    never inside a transaction (specs/05 §5.1 hot-doc rule). A benefit status
+    change restates ``portfolioSummaries`` benefitStatusCounts, the employer's
+    activeBenefits/commitment rollups, and the loan's mirror; the fanout maps the
+    eventType to those keys and enqueues an idempotent recompute. Best-effort (the
+    fanout swallows its own errors; the scheduled rebuild is the backstop).
+    """
+    from projections.fanout import enqueue_for_event
+
+    enqueue_for_event(
+        {
+            "eventType": event_type,
+            "loanId": loan_id,
+            "employerId": employer_id,
+            "metadata": {},
+        },
+        ctx=ctx,
+    )
+
 # Agreement statuses that count as an "active" agreement occupying the loan
 # (specs/10 §10.1 "the loan has no other active agreement").
 _OCCUPYING_STATUSES = frozenset(
@@ -216,6 +239,7 @@ def activate_benefit(
 
     # True only on the real (fresh or reclaimed) path — never on a replay return.
     ran = {"done": False}
+    emitted: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -227,6 +251,7 @@ def activate_benefit(
         loan_id = agreement.get("loanId")
         borrower_id = agreement.get("borrowerId")
         employer_id = agreement.get("employerId")
+        emitted.update({"loan_id": loan_id, "employer_id": employer_id})
 
         loan = _txn_get(txn, loans.ref(client, loan_id)) if loan_id else None
         borrower = (
@@ -370,6 +395,16 @@ def activate_benefit(
         # Replay of a prior completed activation — the stored ACTIVE result.
         return provisional
 
+    # --- POST-COMMIT: nudge the read-model recompute for the benefit status
+    #     change (PENDING -> ACTIVATING). Done before the generate-schedule
+    #     handoff so it runs even in cloud mode (where that handoff raises 202).
+    #     The generate-schedule finalize (ACTIVATING -> ACTIVE, look-ahead) should
+    #     nudge again once it commits — see contractNotes. Off the txn (§5.1).
+    _nudge_projections(
+        ctx, "BENEFIT_ACTIVATION_STARTED",
+        loan_id=emitted.get("loan_id"), employer_id=emitted.get("employer_id"),
+    )
+
     # --- hand off generation to the generate-schedule task (COMPLETION
     #     PROTOCOL, Decision A). Inline mode runs it synchronously and returns
     #     the finalized ACTIVE result (which its wrapper also completed the
@@ -448,6 +483,7 @@ def suspend_benefit(
         client = get_client()
 
     suspended_at = _now_local()
+    emitted: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -538,14 +574,24 @@ def suspend_benefit(
             "correlationId": ctx.correlation_id,
         }
         idempotency.complete(txn, ctx.idempotency_key, result, client=client)
+        emitted.update({"loan_id": loan_id, "employer_id": employer_id})
         return result
 
     try:
-        return _run()
+        result = _run()
     except CommandError:
         raise
     except domain_errors.DomainError as exc:
         raise from_domain_error(exc) from exc
+
+    # --- POST-COMMIT: nudge the read-model recompute (off the txn, §5.1). Only on
+    #     the real path (`emitted` is populated only past the replay/reuse guards).
+    if emitted:
+        _nudge_projections(
+            ctx, "BENEFIT_SUSPENDED",
+            loan_id=emitted.get("loan_id"), employer_id=emitted.get("employer_id"),
+        )
+    return result
 
 
 def resume_benefit(
@@ -713,6 +759,8 @@ def resume_benefit(
         # it runs only AFTER the post-commit shift succeeds (see below). Signal
         # the follow-up on both the fresh and reclaim path (not on a replay return).
         followup["suspended_from"] = suspended_from
+        followup["loan_id"] = loan_id
+        followup["employer_id"] = employer_id
         return result
 
     try:
@@ -734,6 +782,14 @@ def resume_benefit(
     # re-drives the idempotent shift. Inline mode runs it synchronously (-> 200
     # with the resume result); cloud mode returns None (-> 202 + Retry-After).
     if "suspended_from" in followup:
+        # POST-COMMIT: nudge the read-model recompute for the resume (SUSPENDED ->
+        # ACTIVE). Before the shift-schedule handoff so it runs even in cloud mode
+        # (where that handoff raises 202). Off the txn (§5.1). The shift-schedule
+        # task re-dates the schedule; it should nudge the loan again — contractNotes.
+        _nudge_projections(
+            ctx, "BENEFIT_RESUMED",
+            loan_id=followup.get("loan_id"), employer_id=followup.get("employer_id"),
+        )
         from internal.enqueue import enqueue
 
         task_result = enqueue(
@@ -780,6 +836,7 @@ def terminate_benefit(
         client = get_client()
 
     ran_termination = {"done": False}  # True only on the real (non-replay) path
+    emitted: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -790,6 +847,7 @@ def terminate_benefit(
         loan_id = agreement.get("loanId")
         borrower_id = agreement.get("borrowerId")
         employer_id = agreement.get("employerId")
+        emitted.update({"loan_id": loan_id, "employer_id": employer_id})
         loan = _txn_get(txn, loans.ref(client, loan_id)) if loan_id else None
 
         # --- idempotency: begin inside the txn -------------------------------
@@ -900,6 +958,14 @@ def terminate_benefit(
     # schedule is a no-op). Inline mode runs it synchronously (-> 200 with the
     # terminate result); cloud mode returns None (-> 202 + Retry-After).
     if ran_termination["done"]:
+        # POST-COMMIT: nudge the read-model recompute for the termination. Before
+        # the cancel-future handoff so it runs even in cloud mode (202). Off the
+        # txn (§5.1). The cancel-future task cancels the schedule; it should nudge
+        # the loan/current again once it commits — contractNotes.
+        _nudge_projections(
+            ctx, "BENEFIT_TERMINATED",
+            loan_id=emitted.get("loan_id"), employer_id=emitted.get("employer_id"),
+        )
         from internal.enqueue import enqueue
 
         task_result = enqueue(

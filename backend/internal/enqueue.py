@@ -235,6 +235,7 @@ register_job("noop", _noop_job)
 def _register_phase3_handlers() -> None:
     """Register the Phase-3 tasks + jobs (called once at import)."""
     from internal import jobs, tasks
+    from projections import tasks as projection_tasks
 
     # Cloud Tasks — per-item units of work (specs/14 §14.3).
     register_task("generate-schedule", tasks.generate_schedule_task)
@@ -242,11 +243,19 @@ def _register_phase3_handlers() -> None:
     register_task("reconcile-contribution", tasks.reconcile_contribution_task)
     register_task("cancel-future-contributions", tasks.cancel_future_contributions_task)
     register_task("shift-schedule", tasks.shift_schedule_task)
+    # Read-model projection recompute — event-driven off a committed command
+    # (specs/05 §5.2; fanned out post-commit by projections.fanout).
+    register_task("update-projection", projection_tasks.update_projection)
 
     # Cloud Scheduler — time-triggered jobs (specs/14 §14.2).
     register_job("enqueue-due-contributions", jobs.enqueue_due_contributions)
     register_job("reconcile-stuck-payments", jobs.reconcile_stuck_payments)
     register_job("reap-expired-leases", jobs.reap_expired_leases_job)
+    # rebuild-summaries recomputes ALL read-model keys from source through the SAME
+    # recompute fns the update-projection task uses (drift backstop, */15 + nightly).
+    register_job("rebuild-summaries", projection_tasks.rebuild_summaries)
+    register_job("reset-demo", jobs.reset_demo)
+    register_job("expire-idempotency-keys", jobs.expire_idempotency_keys)
 
 
 _register_phase3_handlers()

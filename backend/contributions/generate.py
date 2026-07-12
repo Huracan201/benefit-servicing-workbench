@@ -49,6 +49,7 @@ task wrapper completes the ACTIVATE idempotency key with).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import date, datetime
 from typing import Any, Optional
@@ -74,6 +75,8 @@ from repositories import (
     stamp_update,
 )
 from servicing import events as servicing_events
+
+logger = logging.getLogger("bsw.projections")
 
 ENTITY_TYPE = "BENEFIT_AGREEMENT"
 
@@ -156,6 +159,49 @@ def _contribution_doc(
 
 
 # --------------------------------------------------------------------------- #
+# POST-COMMIT projection nudge (specs/05 §5.1 — never on the finalize txn)
+# --------------------------------------------------------------------------- #
+def _nudge_activation_projections(ctx: CommandContext, agreement: dict) -> None:
+    """POST-COMMIT: fan out the read-model recompute for the finalized activation.
+
+    Call only AFTER the finalize transaction (``ACTIVATING → ACTIVE``, the
+    ``BENEFIT_ACTIVATED`` event) commits — never inside it (specs/05 §5.1 hot-doc
+    rule). The activate command's ``BENEFIT_ACTIVATION_STARTED`` nudge fired at a
+    pre-completion moment (``benefitStatus = ACTIVATING``, no schedule, ``$0``
+    obligation, no look-ahead); this TERMINAL nudge corrects the summaries to the
+    ACTIVE post-state — the portfolio ``benefitStatusCounts``, the employer
+    ``activeBenefits`` / ``monthlyObligationCents`` rollups, and the loan mirror's
+    ``nextContribution*`` look-ahead. The fanout recomputes each key from source, so
+    it reads the now-committed ACTIVE state (the stale ``agreement`` snapshot's
+    status is irrelevant — only its immutable ``loanId`` / ``employerId`` are used).
+
+    Guarded + best-effort: a fanout failure is logged and swallowed so it can never
+    break the already-committed generation tail; the scheduled ``rebuild-summaries``
+    job is the backstop. Runs both inline (from ``activate_benefit``) and via the
+    ``generate-schedule`` task, so nudging here covers both execution modes.
+    """
+    try:
+        from projections.fanout import enqueue_for_event
+
+        enqueue_for_event(
+            {
+                "eventType": "BENEFIT_ACTIVATED",
+                "loanId": agreement.get("loanId"),
+                "employerId": agreement.get("employerId"),
+                "metadata": {},
+            },
+            ctx=ctx,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; rebuild-summaries is the backstop
+        logger.warning(
+            "projection nudge failed after activation finalize for agreement %s "
+            "(rebuild will reconcile)",
+            agreement.get("id"),
+            exc_info=True,
+        )
+
+
+# --------------------------------------------------------------------------- #
 # the task
 # --------------------------------------------------------------------------- #
 def generate_schedule(
@@ -219,6 +265,12 @@ def generate_schedule(
             if kind == "halted":
                 return _halt_result(agreement_id, planned, payload)
             if kind == "finalized":
+                # POST-COMMIT: the finalize txn (ACTIVATING → ACTIVE,
+                # BENEFIT_ACTIVATED) has committed — nudge the read-model recompute
+                # for the terminal state off the txn (§5.1). Fires on a redelivered
+                # already-ACTIVE run too (idempotent recompute). `payload` is the
+                # agreement snapshot read inside that batch txn.
+                _nudge_activation_projections(ctx, payload)
                 return _success_result(
                     agreement_id,
                     payload,

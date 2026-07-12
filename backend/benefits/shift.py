@@ -50,6 +50,7 @@ loan look-ahead) before its writes.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import date, datetime
 from typing import Any, Optional
@@ -65,6 +66,8 @@ from common.periods import (
 )
 from repositories import agreements, contributions, loans, refs, stamp_update
 from servicing import events as servicing_events
+
+logger = logging.getLogger("bsw.projections")
 
 ENTITY_TYPE = "BENEFIT_AGREEMENT"
 
@@ -172,6 +175,45 @@ def _earliest_scheduled_in_txn(
 
 
 # --------------------------------------------------------------------------- #
+# POST-COMMIT projection nudge (specs/05 §5.1 — never on the finalize txn)
+# --------------------------------------------------------------------------- #
+def _nudge_shift_projections(ctx: CommandContext, *, loan_id: str) -> None:
+    """POST-COMMIT: fan out the loan-mirror recompute after a schedule shift.
+
+    Call only AFTER ``_finalize_shift`` commits (``endDate`` + loan look-ahead +
+    the ``SCHEDULE_SHIFTED`` event) — never inside a transaction (specs/05 §5.1
+    hot-doc rule). Re-dating the remaining schedule moves the loan's
+    ``nextContributionDate`` / ``nextContributionAmountCents``, so the
+    ``SCHEDULE_SHIFTED`` fanout (loan_workbench-only) refreshes ``loanWorkbenches``.
+    Only invoked on the real path (a no-op shift wrote no event and changed nothing).
+
+    Guarded + best-effort: a fanout failure is logged and swallowed so it can never
+    break the already-committed shift tail; ``rebuild-summaries`` is the backstop.
+    Runs both inline (from resume/employment) and via the ``shift-schedule`` task,
+    so nudging here covers both execution modes.
+    """
+    try:
+        from projections.fanout import enqueue_for_event
+
+        enqueue_for_event(
+            {
+                "eventType": "SCHEDULE_SHIFTED",
+                "loanId": loan_id,
+                "employerId": None,
+                "metadata": {},
+            },
+            ctx=ctx,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; rebuild-summaries is the backstop
+        logger.warning(
+            "projection nudge failed after schedule shift for loan %s "
+            "(rebuild will reconcile)",
+            loan_id,
+            exc_info=True,
+        )
+
+
+# --------------------------------------------------------------------------- #
 # the task
 # --------------------------------------------------------------------------- #
 def shift_schedule(
@@ -254,7 +296,7 @@ def shift_schedule(
         )
 
     # --- final pass: endDate + loan look-ahead + one SCHEDULE_SHIFTED event -----
-    return _finalize_shift(
+    result = _finalize_shift(
         client,
         ctx=ctx,
         agreement_id=agreement_id,
@@ -266,6 +308,14 @@ def shift_schedule(
         suspended_from=suspended_from,
         resumed_at=resumed_at,
     )
+
+    # POST-COMMIT: nudge the loan-mirror recompute off the txn (§5.1). Only when
+    # _finalize_shift did real work (wrote the SCHEDULE_SHIFTED event) — its no-op
+    # return (nothing re-dated, endDate already extended) omits `correlationId`, so
+    # a re-drive of an already-shifted schedule enqueues no needless recompute.
+    if loan_id and result.get("correlationId"):
+        _nudge_shift_projections(ctx, loan_id=loan_id)
+    return result
 
 
 def _shift_batch(

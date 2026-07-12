@@ -19,6 +19,10 @@ themselves de-dup on deterministic keys.
   ``reconcile-contribution`` per item with a deterministic Cloud Tasks name so two
   overlapping runs never double-enqueue the same contribution.
 * :func:`reap_expired_leases_job` — drives the lease reaper (specs/08 §8.3).
+* :func:`reset_demo` — re-runs the deterministic seed so shared demo credentials
+  always find a clean portfolio (specs/18 §18.1, specs/14 §14.2).
+* :func:`expire_idempotency_keys` — a thin daily TTL-lag *metric emitter*; it
+  DELETES NOTHING (Firestore TTL performs the actual deletion — specs/21 §21.1).
 """
 
 from __future__ import annotations
@@ -197,3 +201,105 @@ def reap_expired_leases_job(payload: dict, ctx) -> dict:
     from idempotency.reaper import reap_expired_leases
 
     return reap_expired_leases(get_client(), ctx)
+
+
+# --------------------------------------------------------------------------- #
+# reset-demo
+# --------------------------------------------------------------------------- #
+def reset_demo(payload: dict, ctx) -> dict:
+    """Re-seed the deterministic demo dataset so the public demo self-heals nightly.
+
+    Re-runs the SAME builder the ``seed_demo`` management command uses (specs/18
+    §18.1, specs/14 §14.2). Idempotent: the seed writes deterministic ids with
+    overwriting ``set``s, so a nightly re-run resets any drift the day's demo use
+    introduced — shared demo credentials always find a clean portfolio.
+
+    The Firestore dataset reseed is the core (it is what drifts). Demo-user
+    provisioning is attempted best-effort afterwards — it needs Firebase Auth admin
+    (or the Auth emulator), so a failure there is logged and swallowed rather than
+    failing the whole reseed job.
+    """
+    from common.firestore import get_client
+    from seed.builder import SeedRunner
+
+    client = get_client()
+    stats = SeedRunner(client).run()
+
+    users = 0
+    try:
+        from seed import users as seed_users
+
+        provisioned = seed_users.provision_demo_users(
+            client, password=seed_users.DEFAULT_PASSWORD
+        )
+        users = len(provisioned)
+    except Exception:  # noqa: BLE001 — dataset reseed is the core; user provisioning is best-effort
+        logger.warning(
+            "reset-demo: demo-user provisioning skipped/failed (dataset reseeded ok)",
+            exc_info=True,
+        )
+
+    logger.info("reset-demo reseeded dataset stats=%s users=%s", stats, users)
+    return {"job": "reset-demo", "reseeded": True, "stats": stats, "users": users}
+
+
+# --------------------------------------------------------------------------- #
+# expire-idempotency-keys — TTL-lag METRIC EMITTER (deletes nothing)
+# --------------------------------------------------------------------------- #
+def expire_idempotency_keys(payload: dict, ctx) -> dict:
+    """Emit a TTL-lag metric for idempotency-key retention (specs/14 §14.2).
+
+    **This job DELETES NOTHING.** Firestore TTL on ``idempotencyKeys.expiresAt`` is
+    what physically deletes expired records (specs/21 §21.1); TTL sweeps can lag up
+    to ~72h. This daily job merely counts records whose ``expiresAt`` is already in
+    the past but which TTL has not yet swept, and logs the count, so an operator can
+    alarm if that backlog grows abnormally — a pure observability backstop.
+
+    Spec reconciliation: this job is defined in specs/14 §14.2 but omitted from the
+    specs/21 §21.2 Cloud Scheduler list. We keep the thin daily metric-emitter per
+    §14.2 (no deletion, no dependency on any queue) and treat the §21.2 omission as
+    an oversight — deleting here would race Firestore TTL and buy nothing.
+    """
+    from datetime import datetime, timezone
+
+    from common.firestore import get_client
+    from repositories import refs
+
+    client = get_client()
+    now = datetime.now(timezone.utc)
+
+    lagging = 0
+    cursor: Optional[Any] = None
+    pages = 0
+    capped = False
+    while True:
+        query = (
+            client.collection(refs.IDEMPOTENCY_KEYS)
+            .where(filter=refs.field_filter("expiresAt", "<", now))
+            .order_by("expiresAt")
+            .order_by("__name__")
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        snapshots = list(query.limit(refs.BATCH_SIZE).stream())
+        lagging += len(snapshots)
+        pages += 1
+        if len(snapshots) < refs.BATCH_SIZE:
+            break
+        if pages >= _MAX_PAGES:
+            capped = True
+            break
+        cursor = snapshots[-1]
+
+    if capped:
+        logger.warning(
+            "expire-idempotency-keys hit the %s-page cap; ttl_lagging=%s is a lower "
+            "bound (a large TTL backlog — investigate)",
+            _MAX_PAGES, lagging,
+        )
+    logger.info(
+        "expire-idempotency-keys ttl_lagging=%s (Firestore TTL performs deletion; "
+        "this job deleted nothing)",
+        lagging,
+    )
+    return {"job": "expire-idempotency-keys", "ttlLagging": lagging, "deleted": 0}

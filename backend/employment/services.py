@@ -90,6 +90,29 @@ from servicing import events as servicing_events
 OPERATION = "change-employment-status"
 ENTITY_TYPE = "BORROWER"
 
+
+def _nudge_projections(ctx: CommandContext, event_type: str, *, loan_id, employer_id) -> None:
+    """POST-COMMIT: fan out the read-model recompute for an employment change.
+
+    Call only AFTER the core transaction commits, on the real (non-replay) path —
+    never inside a transaction (specs/05 §5.1 hot-doc rule). The change mirrors to
+    the loan (employmentStatus) and any benefit cascade restates the portfolio /
+    employer rollups; the fanout maps the eventType to those keys and enqueues an
+    idempotent recompute. Best-effort (the fanout swallows its own errors; the
+    scheduled rebuild is the backstop).
+    """
+    from projections.fanout import enqueue_for_event
+
+    enqueue_for_event(
+        {
+            "eventType": event_type,
+            "loanId": loan_id,
+            "employerId": employer_id,
+            "metadata": {},
+        },
+        ctx=ctx,
+    )
+
 # suspendedReason values (specs/04 §4.6, specs/10 §10.2/§10.4). MANUAL from the
 # suspend command; LEAVE from this employment cascade.
 _SUSPEND_REASON_LEAVE = "LEAVE"
@@ -226,6 +249,7 @@ def change_employment_status(
     # `followup` carries which bounded tail to run.
     ran = {"done": False}
     followup: dict[str, Any] = {}
+    emitted: dict[str, Any] = {}  # entity pointers for the post-commit nudge
 
     @transactional(client)
     def _run(txn: Any) -> dict:
@@ -367,6 +391,7 @@ def change_employment_status(
             followup.update(cascade_followup)
         else:
             idempotency.complete(txn, ctx.idempotency_key, result, client=client)
+        emitted.update({"loan_id": loan_id, "employer_id": borrower.get("employerId")})
         ran["done"] = True
         return result
 
@@ -376,6 +401,18 @@ def change_employment_status(
         raise
     except domain_errors.DomainError as exc:
         raise from_domain_error(exc) from exc
+
+    # --- POST-COMMIT: nudge the read-model recompute (off the txn, §5.1) ------
+    # An employment change mirrors to the loan (employmentStatus) and its cascade
+    # may re-status the benefit — so nudge on EVERY real path, independent of
+    # whether a bounded tail follows. Placed before the tail handoff so it runs
+    # even in cloud mode (where the handoff raises 202). Only the real path
+    # populates `emitted` (a replay/in-progress/reuse returns before it).
+    if ran["done"] and emitted:
+        _nudge_projections(
+            ctx, "EMPLOYMENT_STATUS_CHANGED",
+            loan_id=emitted.get("loan_id"), employer_id=emitted.get("employer_id"),
+        )
 
     # --- follow-up handoff (AFTER the core txn commits) ----------------------
     # Hand the bounded cascade tail onto the async task via enqueue() (COMPLETION

@@ -7,6 +7,14 @@ loans / benefit agreements, their full solved contribution schedules with
 deterministic id, so re-running is idempotent (the nightly ``reset-demo`` job
 self-heals the public demo, specs/18 §18.1).
 
+After the authoritative writes commit, ``run`` derives the read-model **summary**
+docs (``portfolioSummaries`` / ``employerSummaries`` / ``loanWorkbenches``) from
+that source through the shared :mod:`projections.recompute` engine, so a
+freshly-seeded demo's dashboards are populated without waiting for the
+event-driven projection tasks — and seed, the event-driven ``update-projection``
+task, and the nightly reseed all converge on identical values by construction
+(specs/05).
+
 Design choices for a *seed* (vs. the live command layer):
 
 * **Direct, overwriting ``set`` writes** rather than the increment/upsert
@@ -58,6 +66,7 @@ from common.periods import (
 )
 from common.money import solve_schedule
 from exceptions.service import TYPE_DEFAULT_SEVERITY
+from projections import recompute
 from repositories import refs
 from repositories import (
     agreements as agreements_repo,
@@ -258,7 +267,7 @@ class _Batcher:
 # Seed runner
 # --------------------------------------------------------------------------- #
 class SeedRunner:
-    """Generate and write the full deterministic demo dataset."""
+    """Generate and write the full deterministic demo dataset + its read models."""
 
     def __init__(self, client) -> None:
         self._client = client
@@ -269,6 +278,13 @@ class SeedRunner:
         self._emp_rollup: dict[str, dict[str, int]] = {
             e["id"]: {"total": 0, "paid": 0, "active": 0} for e in EMPLOYERS
         }
+        # Distinct read-model coordinates observed while writing the source data;
+        # replayed through the recompute engine after the writes commit
+        # (:meth:`_rebuild_summaries`) so a fresh demo's dashboards are populated
+        # via prod's single derivation path rather than re-derived here.
+        self._periods: set[str] = set()
+        self._employer_periods: set[tuple[str, str]] = set()
+        self._loan_ids: list[str] = []
         self.stats: dict[str, int] = {
             "employers": 0,
             "borrowers": 0,
@@ -284,6 +300,7 @@ class SeedRunner:
             "exceptions": 0,
             "terminated": 0,
             "completed": 0,
+            "summaries": 0,
         }
 
     # -- helpers ---------------------------------------------------------- #
@@ -445,7 +462,44 @@ class SeedRunner:
             self._build_account(spec)
         self._write_employers()
         self._batch.flush()
+        # Source data is now committed — derive every read-model summary from it so a
+        # freshly-seeded demo's dashboards are populated (specs/05). Runs the SAME
+        # engine as prod, so the seed, the event-driven ``update-projection`` task,
+        # and the nightly reseed all converge on identical values by construction.
+        self._rebuild_summaries()
         return self.stats
+
+    def _rebuild_summaries(self) -> None:
+        """Derive every read-model summary doc from the just-seeded source data.
+
+        Drives the shared source-derivation engine
+        (:func:`projections.recompute.apply_key`) — the *same* one the event-driven
+        ``update-projection`` task uses — over exactly the coordinates this run
+        wrote: ``portfolioSummaries/current`` + one period doc per distinct
+        ``periodLabel``; ``employerSummaries/{id}`` and its period buckets per
+        employer; ``loanWorkbenches/{loanId}`` per loan. Deriving via the engine
+        (rather than re-deriving totals inline) keeps a freshly-seeded demo's
+        dashboards identical to what projections would compute. Each key is
+        recomputed from source and its doc overwritten, so re-seeding stays
+        idempotent (byte-identical modulo the gateway's server ``updatedAt``).
+
+        Must run after :meth:`run` has flushed the authoritative writes — the
+        recompute reads source collections, so uncommitted writes would derive
+        empty/partial summaries.
+        """
+        client = self._client
+        keys: list[dict[str, Any]] = [recompute.portfolio_current_key()]
+        keys += [recompute.portfolio_period_key(p) for p in sorted(self._periods)]
+        keys += [recompute.employer_key(emp["id"]) for emp in EMPLOYERS]
+        keys += [
+            recompute.employer_period_key(employer_id, period)
+            for employer_id, period in sorted(self._employer_periods)
+        ]
+        keys += [recompute.loan_workbench_key(lid) for lid in self._loan_ids]
+
+        for key in keys:
+            recompute.apply_key(client, key)
+        self.stats["summaries"] = len(keys)
 
     def _write_employers(self) -> None:
         for emp in EMPLOYERS:
@@ -475,6 +529,7 @@ class SeedRunner:
         loan_id = f"loan_{spec.key}"
         agreement_id = f"ben_{spec.key}"
         borrower_name = f"{spec.first} {spec.last}"
+        self._loan_ids.append(loan_id)
 
         schedule = solve_schedule(spec.total_cents, spec.term)
         start_month = self._start_month(spec.posted)
@@ -516,6 +571,8 @@ class SeedRunner:
             amt = schedule[n - 1]
             sched_dt = scheduled_datetime(start_month, n)
             plabel = period_label(sched_dt)
+            self._periods.add(plabel)
+            self._employer_periods.add((employer_id, plabel))
 
             doc: dict[str, Any] = {
                 "benefitAgreementId": agreement_id,

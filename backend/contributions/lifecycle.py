@@ -37,6 +37,7 @@ Returns a summary ``{"canceled": n, "skipped_processing": m}``.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from typing import Any, Optional
 
@@ -50,6 +51,8 @@ from repositories import (
     stamp_update,
 )
 from servicing import events as servicing_events
+
+logger = logging.getLogger("bsw.projections")
 
 # Entity-type tags on servicing events (mirror payments.service spelling).
 _ENTITY_CONTRIBUTION = "scheduledContribution"
@@ -106,6 +109,46 @@ def _event_common(contribution: dict) -> dict:
         "employer_id": contribution.get("employerId"),
         "benefit_agreement_id": contribution.get("benefitAgreementId"),
     }
+
+
+def _nudge_cancel_projections(
+    ctx: CommandContext, *, loan_id: Optional[str], employer_id: Optional[str]
+) -> None:
+    """POST-COMMIT: fan out the read-model recompute after cancel-future-contributions.
+
+    Call only AFTER the cancel batches + the ``_finalize`` completion commit — never
+    inside a transaction (specs/05 §5.1 hot-doc rule). Cancelling every future
+    contribution restates the portfolio ``contributionStatusCounts``, the employer
+    rollups, and the loan mirror (whose ``nextContribution*`` look-ahead was nulled);
+    the ``FUTURE_CONTRIBUTIONS_CANCELED`` fanout maps to those keys and enqueues an
+    idempotent recompute-from-source. (``portfolioSummaries/{period}.scheduledCents``
+    spans many periods the event can't enumerate — see the NB in
+    :func:`projections.fanout.affected_keys`; ``rebuild-summaries`` owns it.)
+
+    Guarded + best-effort: a fanout failure is logged and swallowed so it can never
+    break the already-committed cancel tail; ``rebuild-summaries`` is the backstop.
+    Runs both inline (from terminate/employment) and via the
+    ``cancel-future-contributions`` task, so nudging here covers both modes.
+    """
+    try:
+        from projections.fanout import enqueue_for_event
+
+        enqueue_for_event(
+            {
+                "eventType": "FUTURE_CONTRIBUTIONS_CANCELED",
+                "loanId": loan_id,
+                "employerId": employer_id,
+                "metadata": {},
+            },
+            ctx=ctx,
+        )
+    except Exception:  # noqa: BLE001 — best-effort; rebuild-summaries is the backstop
+        logger.warning(
+            "projection nudge failed after cancel-future for loan %s "
+            "(rebuild will reconcile)",
+            loan_id,
+            exc_info=True,
+        )
 
 
 def cancel_future_contributions(
@@ -182,6 +225,13 @@ def cancel_future_contributions(
         canceled=canceled,
         skipped_processing=skipped_processing,
     )
+
+    # POST-COMMIT: nudge the read-model recompute off the txn (§5.1). Gated on real
+    # work (canceled > 0) to mirror the FUTURE_CONTRIBUTIONS_CANCELED event, which
+    # `_finalize` only emits when something was cancelled — a redelivery/continuation
+    # that finds everything already CANCELED changed nothing and needs no nudge.
+    if canceled > 0:
+        _nudge_cancel_projections(ctx, loan_id=loan_id, employer_id=employer_id)
 
     return {"canceled": canceled, "skipped_processing": skipped_processing}
 
