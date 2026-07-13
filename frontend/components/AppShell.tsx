@@ -17,6 +17,7 @@
 
 import type { ReactNode } from "react";
 import Nav from "@/components/Nav";
+import SessionBanner from "@/components/SessionBanner";
 import TopBar from "@/components/TopBar";
 
 export interface AppShellProps {
@@ -25,35 +26,42 @@ export interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="grid h-screen grid-rows-[56px_1fr] overflow-hidden bg-bg text-ink md:grid-cols-[216px_1fr]">
-      {/* Brand block — sidebar header (desktop only). */}
-      <div className="col-start-1 row-start-1 hidden items-center gap-2.5 border-b border-r border-border bg-surface px-4 md:flex">
-        <span
-          aria-hidden="true"
-          className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-accent text-[14px] font-bold text-accent-ink"
-        >
-          B
-        </span>
-        <span className="min-w-0 leading-none">
-          <span className="block truncate text-[13.5px] font-semibold -tracking-[0.01em] text-ink">
-            BenefitServicing
+    // Flex column so the (normally-empty) SessionBanner can push the chrome down when a
+    // session expires; the grid fills the remaining height and only <main> scrolls.
+    <div className="flex h-screen flex-col overflow-hidden bg-bg text-ink">
+      {/* Session-expired banner — renders nothing unless the session has expired. */}
+      <SessionBanner />
+
+      <div className="grid min-h-0 flex-1 grid-rows-[56px_1fr] md:grid-cols-[216px_1fr]">
+        {/* Brand block — sidebar header (desktop only). */}
+        <div className="col-start-1 row-start-1 hidden items-center gap-2.5 border-b border-r border-border bg-surface px-4 md:flex">
+          <span
+            aria-hidden="true"
+            className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] bg-accent text-[14px] font-bold text-accent-ink"
+          >
+            B
           </span>
-          <span className="mt-px block text-[10px] uppercase tracking-[0.08em] text-ink-3">
-            Workbench
+          <span className="min-w-0 leading-none">
+            <span className="block truncate text-[13.5px] font-semibold -tracking-[0.01em] text-ink">
+              BenefitServicing
+            </span>
+            <span className="mt-px block text-[10px] uppercase tracking-[0.08em] text-ink-3">
+              Workbench
+            </span>
           </span>
-        </span>
+        </div>
+
+        {/* Header row — global search, "View as" switcher, theme toggle, avatar. */}
+        <TopBar />
+
+        {/* Left navigation — the "Servicing" group. */}
+        <Nav />
+
+        {/* Scrollable content region. */}
+        <main className="col-start-1 row-start-2 min-w-0 overflow-y-auto px-6 py-5 md:col-start-2">
+          {children}
+        </main>
       </div>
-
-      {/* Header row — global search, "View as" switcher, theme toggle, avatar. */}
-      <TopBar />
-
-      {/* Left navigation — the "Servicing" group. */}
-      <Nav />
-
-      {/* Scrollable content region. */}
-      <main className="col-start-1 row-start-2 min-w-0 overflow-y-auto px-6 py-5 md:col-start-2">
-        {children}
-      </main>
     </div>
   );
 }

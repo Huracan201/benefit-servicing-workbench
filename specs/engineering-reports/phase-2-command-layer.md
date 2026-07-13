@@ -3,7 +3,7 @@
 **Project:** BenefitServicing Workbench (`Huracan201/benefit-servicing-workbench`)
 **Phase:** 2 — Domain commands (per [specs/19 §19.2](../19-delivery-and-scope.md))
 **Scope of this report:** the command-layer **foundation** + the **benefit-activation → payment-processing vertical slice**
-**Status:** ✅ Built & QA-verified on `release/phase-2` (base `main` `1261b56`) — pending CI (emulator run) + merge
+**Status:** ✅ Merged to `main` (`c6671ce`, PR #2) — CI-green on the real emulator + CodeRabbit reviewed and addressed.
 **Date:** 2026-07-12
 
 ---
@@ -91,8 +91,8 @@ The layered review paid off: the deepest finding (loan-payoff installment cancel
 | Read-before-write in every transactional function | offline (traced) | ✅ none violated |
 | Pure unit-test logic (request_hash, error mapping, severity map) | offline (**executed**) | ✅ pass |
 | `common/` regression | offline | ✅ 60/60 |
-| Emulator integration (concurrency, fencing, crash-recovery, activate, post) | **CI runner** | pending run |
-| `manage.py check` + Django boot | **CI runner** | pending run |
+| Emulator integration (concurrency, fencing, crash-recovery, activate, post) | **CI runner** | ✅ green |
+| `manage.py check` + Django boot | **CI runner** | ✅ green |
 
 **Offline vs CI split (unchanged from Phase 1):** the pure logic and transaction *structure* are verified locally; the emulator behavior (real Firestore transactions, thread contention, fencing) is verified on CI, which has the network to install deps and run the emulator. The QA agents statically confirmed the CI job will discover and run the tests (a discovery bug that produced a false 0-tests green was fixed — the emulator step now `cd backend` before `manage.py test`).
 
@@ -152,7 +152,7 @@ All found in second-pass QA; all fixed and lead-verified.
 
 ## 10. What's next
 
-The immediate next step is the CI emulator run (the real proof of the two-phase payment under genuine Firestore transactions and thread contention), then merge. After that: the remaining Phase-2 commands (suspend/terminate/employment/exceptions/notes), then Phase 3 (Cloud Tasks + Scheduler + projections).
+*(Written pre-merge.)* The next step was the CI emulator run — the real proof of the two-phase payment under genuine Firestore transactions and thread contention — then merge: **done via PR #2 (`c6671ce`)**. The remaining Phase-2 commands (suspend/terminate/employment/exceptions/notes) then shipped in [part 2](./phase-2-part-2-remaining-commands.md) (PR #3), and Phase 3 (Cloud Tasks + Scheduler + projections) as PR #5.
 
 ---
 

@@ -1,10 +1,12 @@
 "use client";
 
 // Toast — transient feedback for command outcomes (e.g. "Payment retried"). A
-// provider holds the queue; `useToast()` exposes push/dismiss. The viewport is an
-// aria-live region so screen readers announce outcomes; tone maps to a reserved color
-// token but the title text always carries the meaning (never color alone). Auto-
-// dismiss respects a per-toast duration; errors default to sticky.
+// provider holds the queue; `useToast()` exposes push/dismiss. Two PERSISTENT aria-live
+// regions announce outcomes: an ASSERTIVE region for errors (critical tone — they
+// interrupt) and a POLITE region for everything else. Both stay mounted even when empty
+// so assistive tech is always watching and reliably catches a freshly-pushed toast. Tone
+// maps to a reserved color token but the title text always carries the meaning (never
+// color alone). Auto-dismiss respects a per-toast duration; errors default to sticky.
 
 import {
   createContext,
@@ -79,44 +81,64 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ToastContextValue>(() => ({ push, dismiss }), [push, dismiss]);
 
+  // Errors interrupt (assertive); every other outcome is polite. Partitioning preserves
+  // per-region insertion order so a stack of same-tone toasts still reads oldest→newest.
+  const assertiveToasts = toasts.filter((t) => t.tone === "critical");
+  const politeToasts = toasts.filter((t) => t.tone !== "critical");
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div
-        aria-live="polite"
-        aria-atomic="false"
-        className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
-      >
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            role="status"
-            className="pointer-events-auto flex items-start gap-2.5 rounded border border-border bg-surface p-3 shadow-elevation"
-          >
-            <span
-              aria-hidden="true"
-              className={`mt-1 h-2 w-2 shrink-0 rounded-full ${inkColor(
-                t.tone ?? "neutral",
-              )} bg-current`}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-ink">{t.title}</div>
-              {t.description != null ? (
-                <div className="mt-0.5 text-xs text-ink-2">{t.description}</div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              onClick={() => dismiss(t.id)}
-              aria-label="Dismiss notification"
-              className="shrink-0 rounded-sm px-1 text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              <span aria-hidden="true">×</span>
-            </button>
-          </div>
-        ))}
+      {/* One fixed corner stack holding two persistent live regions. The wrapper ignores
+          pointer events; each card opts back in for its dismiss button. */}
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2">
+        <div aria-live="assertive" aria-atomic="false" className="flex flex-col gap-2">
+          {assertiveToasts.map((t) => (
+            <ToastCard key={t.id} toast={t} onDismiss={dismiss} />
+          ))}
+        </div>
+        <div aria-live="polite" aria-atomic="false" className="flex flex-col gap-2">
+          {politeToasts.map((t) => (
+            <ToastCard key={t.id} toast={t} onDismiss={dismiss} />
+          ))}
+        </div>
       </div>
     </ToastContext.Provider>
+  );
+}
+
+// A single toast card. It carries NO role of its own — the enclosing live region owns the
+// announcement semantics, so nesting a second live region here would risk a double read.
+function ToastCard({
+  toast,
+  onDismiss,
+}: {
+  toast: ToastRecord;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div className="pointer-events-auto flex items-start gap-2.5 rounded border border-border bg-surface p-3 shadow-elevation">
+      <span
+        aria-hidden="true"
+        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${inkColor(
+          toast.tone ?? "neutral",
+        )} bg-current`}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-ink">{toast.title}</div>
+        {toast.description != null ? (
+          <div className="mt-0.5 text-xs text-ink-2">{toast.description}</div>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={() => onDismiss(toast.id)}
+        aria-label="Dismiss notification"
+        className="shrink-0 rounded-sm px-1 text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </div>
   );
 }
 

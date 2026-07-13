@@ -2,8 +2,9 @@
 
 // TopBar — the 56px header row of the app shell (specs/15 §15.1, U1 wireframe chrome).
 // Left: a global search input. Right: a DEV/DEMO "View as" role switcher, the U3
-// ThemeToggle, and a user avatar. The search is a non-functional affordance for now
-// (global search lands in a later slice — see contractNotes).
+// ThemeToggle, and the real session identity (signed-in email + custom-claim role +
+// sign-out, or a Sign-in link when logged out — from useSession()). The search is a
+// non-functional affordance for now (global search lands in a later slice).
 //
 // The "View as" switcher is explicitly a CLIENT-SIDE demo affordance: it sets which
 // role the UI *pretends* to be so RoleGate can show/lighten affordances. It is NOT a
@@ -12,7 +13,10 @@
 // expose it to RoleGate consumers via a shared hook/context (see contractNotes).
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import type { User } from "firebase/auth";
 import ThemeToggle from "@/components/ThemeToggle";
+import { useSession } from "@/lib/session";
 import { ROLES, type Role } from "@/lib/types";
 
 /** localStorage key the demo "View as" role is persisted under. A later slice should
@@ -29,9 +33,22 @@ const ROLE_SEGMENTS: ReadonlyArray<{ role: Role; short: string; full: string }> 
   { role: "ADMINISTRATOR", short: "Admin", full: "Administrator" },
 ];
 
-// Demo persona shown in the avatar (initials) — cosmetic only.
-const DEMO_USER_NAME = "Alex Operator";
-const DEMO_USER_INITIALS = "AO";
+/** Full label for a role, via the segment table; falls back to the raw enum value. */
+function roleFullLabel(role: Role | null): string | null {
+  if (!role) return null;
+  return ROLE_SEGMENTS.find((s) => s.role === role)?.full ?? role;
+}
+
+/** Two-letter avatar initials from the signed-in user's display name (preferred) or email. */
+function initialsFor(user: User | null): string {
+  const source = (user?.displayName || user?.email || "").trim();
+  if (!source) return "?";
+  const words = source.split(/[\s@._-]+/).filter(Boolean);
+  const first = words[0]?.charAt(0) ?? "";
+  const last = words.length > 1 ? (words[words.length - 1]?.charAt(0) ?? "") : "";
+  const initials = (first + last).toUpperCase();
+  return initials || source.slice(0, 2).toUpperCase();
+}
 
 function isRole(value: string | null): value is Role {
   return value != null && (ROLES as readonly string[]).includes(value);
@@ -54,6 +71,12 @@ export function TopBar() {
   // mismatch); resolve the persisted choice in an effect after mount, mirroring
   // ThemeToggle's pattern.
   const [viewAsRole, setViewAsRole] = useState<Role>(DEFAULT_VIEW_AS_ROLE);
+
+  // The REAL session (Firebase custom-claim role) — distinct from the "View as" preview
+  // above. Screens authorize command affordances off this role, not the preview.
+  const { user, role: claimsRole, status, signOut } = useSession();
+  const roleLabel = roleFullLabel(claimsRole);
+  const initials = initialsFor(user);
 
   useEffect(() => {
     const initial = storedRole();
@@ -149,13 +172,48 @@ export function TopBar() {
 
       <ThemeToggle />
 
-      <span
-        title={DEMO_USER_NAME}
-        aria-label={`Signed in as ${DEMO_USER_NAME}`}
-        className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-accent/20 text-xs font-bold text-accent"
-      >
-        {DEMO_USER_INITIALS}
-      </span>
+      {/* Real session identity — the signed-in email + custom-claim role + sign-out.
+          Distinct from the "View as" preview above (which is affordance-only). */}
+      {status === "authed" && user ? (
+        <div className="flex items-center gap-2.5">
+          <div className="hidden min-w-0 text-right sm:block">
+            <div className="truncate text-xs font-semibold text-ink">
+              {user.email ?? "Signed in"}
+            </div>
+            {roleLabel ? (
+              <div className="truncate text-[10px] uppercase tracking-[0.06em] text-ink-3">
+                {roleLabel}
+              </div>
+            ) : null}
+          </div>
+          <span
+            aria-hidden="true"
+            title={user.email ?? undefined}
+            className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-accent/20 text-xs font-bold text-accent"
+          >
+            {initials}
+          </span>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            className="rounded-sm border border-border bg-surface-2 px-2.5 py-1.5 text-sm text-ink-2 transition-colors hover:border-accent/[0.4] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : status === "loading" ? (
+        <div
+          aria-hidden="true"
+          className="h-[30px] w-[30px] shrink-0 animate-pulse rounded-full bg-surface-2 motion-reduce:animate-none"
+        />
+      ) : (
+        <Link
+          href="/signin"
+          className="rounded-sm border border-border bg-surface-2 px-2.5 py-1.5 text-sm font-semibold text-ink-2 transition-colors hover:border-accent/[0.4] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Sign in
+        </Link>
+      )}
     </header>
   );
 }
