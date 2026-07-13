@@ -3,7 +3,7 @@
 **Project:** BenefitServicing Workbench (`Huracan201/benefit-servicing-workbench`)
 **Phase:** 2 — Domain commands, part 2 (completes the command layer; per [specs/19 §19.2](../19-delivery-and-scope.md))
 **Scope:** benefit suspend/resume/terminate · employment-status cascade · exception workflow · servicing notes · admin (role + employer status)
-**Status:** ✅ Built & QA-verified on `release/phase-2-part-2` (base `main` `c6671ce`) — pending commit → CI → merge
+**Status:** ✅ Merged to `main` (`abf3d33`, PR #3) — CI-green on the real emulator + CodeRabbit reviewed and addressed.
 **Date:** 2026-07-12
 
 ---
@@ -88,8 +88,8 @@ The layered approach earned its keep again: the crash-gap BLOCKER was invisible 
 | Crash-gap envelope (4 scenarios: first-call / replay / reclaim-after-failure / different-key-409) | offline (fake + code read) | ✅ |
 | `_months_between` month-arithmetic (incl. the date-bomb clamp cases) | offline (executed) | ✅ |
 | `common/` regression | offline | ✅ 60/60 |
-| Emulator integration — 5 flows (suspend/resume/terminate, cascade, exceptions, notes) | **CI runner** | pending run |
-| `manage.py check` + Django boot (3 new apps) | **CI runner** | pending run |
+| Emulator integration — 5 flows (suspend/resume/terminate, cascade, exceptions, notes) | **CI runner** | ✅ green |
+| `manage.py check` + Django boot (3 new apps) | **CI runner** | ✅ green |
 
 **Tests added:** 4 new emulator integration test files (all 5 flows, concrete post-state assertions — the shift dates + endDate, the cancellations, the cascade branches, the count changes) + 10 pure `@tag('unit')` tests for the shift month-arithmetic (closing the pt2 unit-coverage gap and locking the date-bomb edge cases).
 

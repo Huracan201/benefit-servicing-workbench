@@ -3,7 +3,7 @@
 **Project:** BenefitServicing Workbench (`Huracan201/benefit-servicing-workbench`)
 **Phase:** 4 — Workbench UI, part 1 (the design-system foundation + the two read-only showcase screens; part 2 = detail, worklists, polish/e2e — [specs/19 §19.2](../19-delivery-and-scope.md))
 **Scope:** the design system (tokens + self-hosted fonts + the shared component kit) · the command client (write path) · the app shell · the **dashboard** · the **loan portfolio**
-**Status:** ✅ Built & QA-verified across 2 slices (A + B) on `release/phase-4` — CI green (frontend `lint|test|build`) each push. On **PR #6**, shipped as Phase 4 **part 1**.
+**Status:** ✅ Merged to `main` (`1d25e62`, PR #6) — CI-green (frontend `lint`/`test`/`build`) + CodeRabbit reviewed and addressed. Part 2 (the command surface + worklists + e2e) is [PR #7](./phase-4-part-2-command-surface-and-worklists.md).
 **Date:** 2026-07-12
 
 ---

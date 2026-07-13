@@ -1,6 +1,6 @@
 # Phase 4 part 2 — the command surface, worklists & e2e
 
-**Status:** 🟡 On `release/phase-4-part-2` — **PR #7**, draft. Built + adversarially QA'd + **verified locally by running** (typecheck / lint / test / build green). CI: frontend / backend / rules / OpenAPI all green; the newly-activated **`e2e` job passed 4/5 on its first run** — the full stack (seed → Django → Next → Playwright) works — and the 5th (`forbidden`) was a test-selector strict-mode issue (fixed to `.first()`, re-running to 5/5). Supersedes the "part 2 pending" row from [part 1](./phase-4-part-1-design-system-and-read-screens.md).
+**Status:** 🟢 On `release/phase-4-part-2` — **PR #7**, ready. Built + adversarially QA'd + **verified locally by running** (typecheck / lint / test / build green). **CI is fully green — all 6 jobs, including the newly-activated `e2e` job at 5/5** (the full stack seed → Django → Next → Playwright works end-to-end; it took one test-selector fix after a 4/5 first run). CodeRabbit's two rounds (5 comments) are all addressed. Supersedes the "part 2 pending" row from [part 1](./phase-4-part-1-design-system-and-read-screens.md).
 
 ## 1. Scope
 
@@ -49,7 +49,8 @@ Same loop as every prior phase — with **one upgrade**: this session's sandbox 
 | Local `npm ci` against the committed `package-lock.json` | ✅ in sync (exit 0) |
 | `npx playwright test --list` (config + 5 specs compile & collect) | ✅ 5 tests / 5 files |
 | CI (frontend `npm ci` + lint/test/build; backend; rules; OpenAPI) | ✅ green on PR #7 |
-| CI `e2e` job (emulator + Django + Next + Playwright, 5 specs) | 🟢 4/5 on first activation; the 5th (`forbidden`) was a strict-mode selector, fixed to `.first()` → re-running to 5/5 |
+| CI `e2e` job (emulator + Django + Next + Playwright, 5 specs) | ✅ 5/5 on PR #7 (one `.first()` selector fix after a 4/5 first run) |
+| CodeRabbit (2 rounds, 5 comments) | ✅ all addressed |
 
 ## 5. Issues found & fixed (adversarial QA, before commit)
 
@@ -75,7 +76,7 @@ Same loop as every prior phase — with **one upgrade**: this session's sandbox 
 ## 7. Known limitations / follow-ups
 
 - **`next@14.2.32` carries a security advisory** (surfaced by `npm ci`) — a part-1 dependency; a version bump is a separate, testable follow-up, out of scope for this feature PR.
-- **The `e2e` job is CI-validated** — it passed 4/5 on first activation, so the full stack (seed → Django → Next → Playwright) works end-to-end; the one `forbidden.spec` strict-mode selector is fixed (`.first()`).
+- **The `e2e` job passes 5/5 on CI** (the full seed → Django → Next → Playwright stack). It runs against `next dev` (on-demand compilation, generous timeouts) rather than a production build — fine for the critical-path specs; a `next build && start` harness would be marginally closer to prod.
 - **Three small date-formatting helpers** (`time.tsx`, and the `toDate` in `readContributions.ts` / the exception columns) each correctly coerce a Firestore `Timestamp`; a shared helper could dedupe them.
 - **`/signin` renders inside the app shell** (the root layout wraps every route); acceptable for the demo, a chrome-less variant would need a route group.
 - **Per-loan exception ordering is client-sorted** (bounded to 100) — no `(loanId, severityRank)` composite index exists; fine at demo scale.
