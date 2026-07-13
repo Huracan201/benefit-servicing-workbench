@@ -47,7 +47,7 @@ export interface CollectionPageState<T> {
   empty: boolean;
   /** Cursor for the NEXT page — pass back in as `cursor`. Null when no page loaded. */
   lastVisible: QueryDocumentSnapshot<DocumentData> | null;
-  /** Heuristic: a full page was returned, so another page may exist. */
+  /** True iff a further page actually exists (exact — we look one row ahead). */
   hasMore: boolean;
 }
 
@@ -99,20 +99,25 @@ export function useCollectionPage<T>(
 
     const parts: QueryConstraint[] = [...constraintsRef.current];
     if (cursor) parts.push(startAfter(cursor));
-    parts.push(limitFn(size));
+    // Look one row past the page so `hasMore` is EXACT (never enable Next into an
+    // empty page when the total is a multiple of the page size). The lookahead row
+    // is trimmed below, so the cursor stays the last SHOWN doc (semantics preserved).
+    parts.push(limitFn(size + 1));
 
     const q = query(collection(getFirebaseDb(), collectionPath), ...parts);
     const unsubscribe = onSnapshot(
       q,
       (snap) => {
-        const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as T);
+        const hasMore = snap.docs.length > size;
+        const pageDocs = hasMore ? snap.docs.slice(0, size) : snap.docs;
+        const items = pageDocs.map((d) => ({ id: d.id, ...d.data() }) as T);
         setState({
           items,
           loading: false,
           error: null,
-          empty: snap.empty,
-          lastVisible: snap.docs.length ? snap.docs[snap.docs.length - 1] : null,
-          hasMore: snap.docs.length === size,
+          empty: pageDocs.length === 0,
+          lastVisible: pageDocs.length ? pageDocs[pageDocs.length - 1] : null,
+          hasMore,
         });
       },
       (err) =>

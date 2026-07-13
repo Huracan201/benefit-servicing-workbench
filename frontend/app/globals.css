@@ -2,45 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Cool-slate neutral palette + single teal accent (specs/15 §15.1). RGB channel
-   triplets so Tailwind's `<alpha-value>` works. Light + dark are both first-class. */
+/* =============================================================================
+   Design tokens — "ledger + control room" (U1 foundation).
+   The user approved a rendered preview; these values match it exactly.
+
+   Colors are stored as space-separated RGB channel triplets (not hex) so
+   tailwind.config.ts can wrap them as `rgb(var(--token) / <alpha-value>)` and
+   Tailwind's opacity utilities keep working (e.g. `bg-surface/60`).
+
+   Theming precedence (viewer toggle must win both ways):
+     :root                                        → light (default)
+     @media (prefers-color-scheme: dark)
+       :root:not([data-theme="light"])            → follow OS dark…
+     :root[data-theme="dark"]                     → …unless toggled dark
+     :root[data-theme="light"]                    → …or toggled light
+
+   Accent (Verdigris) is chrome / interaction ONLY — it never signals "good".
+   ========================================================================== */
 :root {
-  --surface: 248 250 252; /* slate-50 */
-  --surface-muted: 241 245 249; /* slate-100 */
-  --surface-raised: 255 255 255;
-  --border: 226 232 240; /* slate-200 */
-  --content: 15 23 42; /* slate-900 */
-  --content-muted: 71 85 105; /* slate-600 */
-  --accent: 13 148 136; /* teal-600 */
-  --accent-fg: 255 255 255;
+  /* Chrome */
+  --accent: 14 124 113;
+  --accent-ink: 255 255 255;
+  --bg: 233 238 237;
+  --surface: 255 255 255;
+  --surface-2: 246 248 248;
+  --border: 226 231 230;
+  --ink: 23 32 31;
+  --ink-2: 85 99 96;
+  --ink-3: 97 110 104;
+
+  /* Status / semantics (keyed by meaning, never re-used as chrome) */
+  --good: 46 139 73;
+  --warning: 183 121 31;
+  --serious: 192 86 42;
+  --critical: 176 38 38;
+  --info: 31 95 174;
+  --neutral: 107 119 117;
+
+  /* Shape */
+  --radius: 8px;
+  --radius-sm: 6px;
+  --radius-pill: 999px;
+
+  /* Single elevation */
+  --shadow: 0 1px 2px rgb(23 32 31 / 0.05), 0 6px 16px -8px rgb(23 32 31 / 0.12);
 }
 
-.dark {
-  --surface: 2 6 23; /* slate-950 */
-  --surface-muted: 15 23 42; /* slate-900 */
-  --surface-raised: 15 23 42; /* slate-900 */
-  --border: 30 41 59; /* slate-800 */
-  --content: 226 232 240; /* slate-200 */
-  --content-muted: 148 163 184; /* slate-400 */
-  --accent: 45 212 191; /* teal-400 */
-  --accent-fg: 2 6 23;
-}
-
+/* Dark palette, shared by the OS-preference and explicit-toggle selectors. */
 @media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    --surface: 2 6 23;
-    --surface-muted: 15 23 42;
-    --surface-raised: 15 23 42;
-    --border: 30 41 59;
-    --content: 226 232 240;
-    --content-muted: 148 163 184;
-    --accent: 45 212 191;
-    --accent-fg: 2 6 23;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --accent: 43 179 163;
+    --accent-ink: 8 18 15;
+    --bg: 11 17 16;
+    --surface: 18 26 24;
+    --surface-2: 24 33 31;
+    --border: 40 50 47;
+    --ink: 238 243 241;
+    --ink-2: 167 180 176;
+    --ink-3: 139 155 149;
+
+    --good: 70 209 98;
+    --warning: 234 181 63;
+    --serious: 243 145 96;
+    --critical: 240 107 107;
+    --info: 90 162 234;
+    --neutral: 138 151 148;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px -8px rgb(0 0 0 / 0.6);
   }
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --accent: 43 179 163;
+  --accent-ink: 8 18 15;
+  --bg: 11 17 16;
+  --surface: 18 26 24;
+  --surface-2: 24 33 31;
+  --border: 40 50 47;
+  --ink: 238 243 241;
+  --ink-2: 167 180 176;
+  --ink-3: 139 155 149;
+
+  --good: 70 209 98;
+  --warning: 234 181 63;
+  --serious: 243 145 96;
+  --critical: 240 107 107;
+  --info: 90 162 234;
+  --neutral: 138 151 148;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.45), 0 6px 18px -8px rgb(0 0 0 / 0.6);
+}
+
+/* Explicit light toggle re-asserts the light palette even when the OS is dark. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --accent: 14 124 113;
+  --accent-ink: 255 255 255;
+  --bg: 233 238 237;
+  --surface: 255 255 255;
+  --surface-2: 246 248 248;
+  --border: 226 231 230;
+  --ink: 23 32 31;
+  --ink-2: 85 99 96;
+  --ink-3: 97 110 104;
+
+  --good: 46 139 73;
+  --warning: 183 121 31;
+  --serious: 192 86 42;
+  --critical: 176 38 38;
+  --info: 31 95 174;
+  --neutral: 107 119 117;
+
+  --shadow: 0 1px 2px rgb(23 32 31 / 0.05), 0 6px 16px -8px rgb(23 32 31 / 0.12);
+}
+
+/* Base document surface. Digits align everywhere (ledgers), body size = 13px.
+   `color-scheme` follows the SAME selectors as the tokens above (not the OS), so
+   native controls + scrollbars track the viewer's toggle both ways. */
+html {
+  color-scheme: light;
+}
+
 body {
-  color: rgb(var(--content));
-  background: rgb(var(--surface));
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-size: 0.8125rem; /* 13px body */
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
