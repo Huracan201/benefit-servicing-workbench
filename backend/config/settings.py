@@ -70,6 +70,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+# ---------------------------------------------------------------------------
+# Security response headers (specs/12; security review §7 #9 defense-in-depth).
+# django.middleware.security.SecurityMiddleware emits nosniff / referrer-policy / HSTS /
+# SSL-redirect from these; core.middleware.SecurityHeadersMiddleware adds X-Frame-Options +
+# a strict CSP for the JSON API. HTTPS-only hardening is armed ONLY in production, so local
+# http, the emulator, CI, and Cloud Run's http health probes keep working.
+# ---------------------------------------------------------------------------
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+_IS_PRODUCTION = ENVIRONMENT == "production"
+SECURE_SSL_REDIRECT = _IS_PRODUCTION
+# Cloud Run's internal liveness/startup probes hit http without the forwarded-proto header;
+# exempt the health endpoints so they are never 301'd into a failed probe.
+SECURE_REDIRECT_EXEMPT = [r"^health$", r"^readiness$"]
+SECURE_HSTS_SECONDS = 31_536_000 if _IS_PRODUCTION else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _IS_PRODUCTION
+SECURE_HSTS_PRELOAD = _IS_PRODUCTION
+
 
 # ---------------------------------------------------------------------------
 # Applications
@@ -100,6 +119,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "core.middleware.SecurityHeadersMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "core.middleware.CorrelationIdMiddleware",
@@ -150,6 +171,17 @@ CACHES = {
 # Django REST Framework
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
+    # Production serves JSON only — the DRF Browsable API is a useful dev affordance
+    # but an unnecessary introspection/attack surface in prod (security-review-phase-3-4).
+    # Dev/CI keep it.
+    "DEFAULT_RENDERER_CLASSES": (
+        ["rest_framework.renderers.JSONRenderer"]
+        if _IS_PRODUCTION
+        else [
+            "rest_framework.renderers.JSONRenderer",
+            "rest_framework.renderers.BrowsableAPIRenderer",
+        ]
+    ),
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "firebase_auth.authentication.FirebaseAuthentication",
     ],
@@ -305,6 +337,14 @@ if ENVIRONMENT == "production":
         )
     if INTERNAL_DEV_SECRET == "dev-internal-secret":
         _misconfigured.append("INTERNAL_DEV_SECRET must be set (not the dev default)")
+    # The emulator hosts are the SWITCH that flips /internal ingress from Google-signed
+    # OIDC to the static dev-secret bypass (firebase_auth/middleware.py) and points the
+    # Firestore client at an emulator — never valid in production. Assert the switch is
+    # off, not just the secret's value (security-review-phase-3-4).
+    if FIRESTORE_EMULATOR_HOST or env_str("FIREBASE_AUTH_EMULATOR_HOST", ""):
+        _misconfigured.append(
+            "FIRESTORE_EMULATOR_HOST / FIREBASE_AUTH_EMULATOR_HOST must be unset in production"
+        )
     if _misconfigured:
         raise ImproperlyConfigured(
             "Insecure production configuration — refusing to start: "

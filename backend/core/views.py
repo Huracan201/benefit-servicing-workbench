@@ -13,6 +13,7 @@ needs a Firebase token.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from rest_framework import status
@@ -36,14 +37,28 @@ def health(_request: Request) -> Response:
     return Response({"status": "ok"})
 
 
-def _check_firestore() -> dict[str, Any]:
-    """Best-effort Firestore reachability check.
+# /readiness is UNAUTHENTICATED (Cloud Run probes need no token), so an unbounded
+# flood would otherwise amplify 1 request -> 1 Firestore round-trip (cost / DoS —
+# security-review-phase-3-4). Cache the dependency result for a short TTL so a burst
+# collapses to at most one probe per window; Cloud Run's own frequent probes read the
+# cache. A TTL (not a throttle) is used deliberately: throttling would reject the
+# legitimate liveness/readiness probes. A ~5s window is well within probe tolerance.
+_READINESS_TTL_SECONDS = 5.0
+_readiness_cache: dict[str, Any] = {"at": 0.0, "result": None}
 
-    Uses the agreed seam ``common.firestore.get_client`` (emulator-aware). A
-    tiny bounded read confirms the client can actually round-trip, not just
-    construct. Import is lazy so a probe failure is reported, never an import
-    error at module load.
+
+def _check_firestore() -> dict[str, Any]:
+    """Best-effort Firestore reachability check, cached for ``_READINESS_TTL_SECONDS``.
+
+    Uses the agreed seam ``common.firestore.get_client`` (emulator-aware). A tiny
+    bounded read confirms the client can actually round-trip, not just construct.
+    Import is lazy so a probe failure is reported, never an import error at module load.
     """
+    now = time.monotonic()
+    cached = _readiness_cache["result"]
+    if cached is not None and (now - _readiness_cache["at"]) < _READINESS_TTL_SECONDS:
+        return cached
+
     try:
         from common.firestore import get_client
 
@@ -51,10 +66,14 @@ def _check_firestore() -> dict[str, Any]:
         # Minimal round-trip against a throwaway collection; the doc need not
         # exist — a successful query proves reachability.
         next(iter(client.collection("_readiness_probe").limit(1).stream()), None)
-        return {"status": "ok"}
+        result: dict[str, Any] = {"status": "ok"}
     except Exception as exc:  # noqa: BLE001 - readiness must report, not raise
         logger.warning("readiness firestore check failed", exc_info=exc)
-        return {"status": "unavailable", "error": type(exc).__name__}
+        result = {"status": "unavailable", "error": type(exc).__name__}
+
+    _readiness_cache["at"] = now
+    _readiness_cache["result"] = result
+    return result
 
 
 @api_view(["GET"])
