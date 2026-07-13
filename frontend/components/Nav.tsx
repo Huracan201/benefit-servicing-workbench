@@ -4,13 +4,14 @@
 // Payments · Exceptions. Active route is indicated by the teal accent chrome (tinted
 // background + left-border accent) PLUS an aria-current marker, never color alone.
 //
-// Count badges (Payments / Exceptions queues) render placeholder counts today; a later
-// slice feeds real read-model counts via the `counts` prop (see contractNotes) — keyed
-// by the nav item `href`.
+// Count badges (Payments / Exceptions queues) show LIVE read-model counts from the portfolio
+// summary (eventually consistent — an at-a-glance hint, never a financial decision), keyed by
+// the nav item `href`. A zero/loading count renders no badge.
 
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { usePortfolioCurrent } from "@/lib/readModels";
 
 export interface NavItem {
   href: string;
@@ -56,13 +57,8 @@ export const NAV_ITEMS: NavItem[] = [
  *  real read-model counts (payments-to-process, open exceptions) via `Nav counts=…`. */
 export type NavCounts = Partial<Record<string, number>>;
 
-const PLACEHOLDER_COUNTS: NavCounts = {
-  "/payments": 7,
-  "/exceptions": 5,
-};
-
 export interface NavProps {
-  /** Override the placeholder badge counts (keyed by item href). */
+  /** Override the live read-model badge counts (keyed by item href) — for tests/stories. */
   counts?: NavCounts;
 }
 
@@ -71,8 +67,18 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function Nav({ counts = PLACEHOLDER_COUNTS }: NavProps) {
+export function Nav({ counts: countsOverride }: NavProps = {}) {
   const pathname = usePathname() ?? "/";
+  // Live queue badges from the portfolio read model: Payments = contributions awaiting action
+  // (SCHEDULED + RETRY_PENDING), Exceptions = open operational exceptions. Eventually
+  // consistent by design — never used for a financial decision (specs/05 §5.7).
+  const { data: summary } = usePortfolioCurrent();
+  const counts: NavCounts = countsOverride ?? {
+    "/payments":
+      (summary?.contributionStatusCounts?.SCHEDULED ?? 0) +
+      (summary?.contributionStatusCounts?.RETRY_PENDING ?? 0),
+    "/exceptions": summary?.openExceptionCount ?? 0,
+  };
   return (
     // Desktop-first by design: the Workbench is a dense operations console (desktop
     // wireframes, wide data tables), so this sidebar is intentionally hidden below `md`.
@@ -110,7 +116,7 @@ export function Nav({ counts = PLACEHOLDER_COUNTS }: NavProps) {
                   {item.icon}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {typeof count === "number" ? (
+                {typeof count === "number" && count > 0 ? (
                   <span
                     aria-label={`${count} items`}
                     className="ml-auto shrink-0 rounded-pill bg-critical/[0.16] px-1.5 py-px text-[10px] font-bold tabular-nums text-critical"

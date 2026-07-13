@@ -5,15 +5,15 @@
 // change — the SOURCE benefit stays ACTIVE because the screen only renders confirmed
 // Firestore source state.
 //
-// The 409 is produced by intercepting the real command (the app genuinely sends `If-Match`
-// — we assert it) and answering STALE_WRITE. Interception rather than a natural race because
-// the emulator backend does not itself enforce `If-Match` on the request path (it has no
-// `raise StaleWrite` on any command) — see the unit's report. This still exercises the app's
-// real send-path and its typed-error → toast rendering.
+// The 409 is produced by the REAL backend, which enforces `If-Match` server-side
+// (commands.base.assert_expected_revision). The app genuinely sends the agreement's current
+// revision as `If-Match` — we capture and assert it — then OVERWRITE it with a stale value on
+// the way out so the server's optimistic-concurrency precondition genuinely rejects it. This
+// exercises real server behavior + the client's typed-error → toast rendering, not a mock.
 
 import { test, expect } from "@playwright/test";
 import { USERS, LOANS, BORROWER_NAMES } from "./seed";
-import { signIn, corsJsonHeaders, fulfillPreflight } from "./helpers";
+import { signIn, fulfillPreflight } from "./helpers";
 
 test("Flow STALE_WRITE — a stale If-Match surfaces the typed 409 toast and makes no phantom change", async ({
   page,
@@ -27,18 +27,10 @@ test("Flow STALE_WRITE — a stale If-Match surfaces the typed 409 toast and mak
       await fulfillPreflight(route);
       return;
     }
+    // Capture the app's real (current-revision) If-Match, then send a stale one so the REAL
+    // backend's assert_expected_revision produces a genuine 409 STALE_WRITE.
     capturedIfMatch = req.headers()["if-match"] ?? null;
-    await route.fulfill({
-      status: 409,
-      headers: corsJsonHeaders(route),
-      body: JSON.stringify({
-        error: {
-          code: "STALE_WRITE",
-          message: "The record changed under you.",
-          correlationId: "e2e-stale-write",
-        },
-      }),
-    });
+    await route.continue({ headers: { ...req.headers(), "if-match": "999999" } });
   });
 
   await page.goto(`/loans/${LOANS.henryBaker}`);

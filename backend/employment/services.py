@@ -71,6 +71,7 @@ from commands.base import (
     NotFound,
     OperationInProgress,
     ValidationError,
+    assert_expected_revision,
     from_domain_error,
     transactional,
 )
@@ -297,6 +298,11 @@ def change_employment_status(
             raise IdempotencyKeyReused(
                 "idempotency key reused with a different request"
             )
+
+        # Optimistic concurrency (specs/08 §8.4): this endpoint targets the borrower, so the
+        # If-Match precondition is asserted against the borrower's revision. PROCEED path only
+        # (a replay returned above); no-op when the client sent no If-Match.
+        assert_expected_revision(borrower, ctx)
 
         # --- borrower employment transition + benefit cascade ----------------
         # Reclaim-aware: on a same-key reclaim of an abandoned lease where the

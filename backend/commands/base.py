@@ -248,12 +248,17 @@ class CommandContext:
     request_hash: str = ""
     lease_owner: str = field(default_factory=lambda: f"run_{uuid.uuid4().hex}")
     is_system: bool = False
+    #: Optimistic-concurrency precondition from the client ``If-Match`` header (specs/08 §8.4).
+    #: When set, a command asserts the target entity's ``revision`` equals this BEFORE mutating,
+    #: else raises :class:`StaleWrite`. ``None`` = the client sent no ``If-Match``.
+    expected_revision: Optional[int] = None
 
     @classmethod
     def build(cls, *, actor_id: str, actor_role: str, actor_name: str,
               method: str, path: str, body: Any = None,
               idempotency_key: str = "",
-              correlation_id: Optional[str] = None) -> "CommandContext":
+              correlation_id: Optional[str] = None,
+              expected_revision: Optional[int] = None) -> "CommandContext":
         """Construct a context, computing the request hash from the request.
 
         Convenience for views: pass the raw request pieces and get a fully
@@ -266,6 +271,27 @@ class CommandContext:
             correlation_id=correlation_id or uuid.uuid4().hex,
             idempotency_key=idempotency_key,
             request_hash=request_hash(method, path, body),
+            expected_revision=expected_revision,
+        )
+
+
+def assert_expected_revision(entity: dict, ctx: "CommandContext") -> None:
+    """Enforce the client's ``If-Match`` optimistic-concurrency precondition (specs/08 §8.4).
+
+    A no-op when the client sent no ``If-Match`` (``ctx.expected_revision is None``). Otherwise
+    the target entity's current ``revision`` MUST equal the expected value — else the entity
+    changed under the operator since they loaded it → :class:`StaleWrite` (409 ``STALE_WRITE``).
+    Call this INSIDE the state-transition transaction, right after reading the entity, so it
+    races correctly against a concurrent writer (the txn re-reads the current revision).
+    """
+    expected = ctx.expected_revision
+    if expected is None:
+        return
+    current = entity.get("revision")
+    if current != expected:
+        raise StaleWrite(
+            f"expected revision {expected} but the record is at {current} — "
+            "it changed since you loaded it; refresh and retry",
         )
 
 

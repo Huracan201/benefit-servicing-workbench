@@ -21,6 +21,8 @@ view classes are the importable seam it references.
 
 from __future__ import annotations
 
+import logging
+import time
 import uuid
 
 from rest_framework.response import Response
@@ -32,6 +34,7 @@ from commands.base import (
     OperationInProgress,
     ValidationError,
 )
+from core.logging_utils import log_event
 from firebase_auth.authentication import FirebaseAuthentication
 from firebase_auth.permissions import RequireManager, RequireOperations
 from payments.service import process_contribution, retry_contribution
@@ -52,6 +55,9 @@ def _actor_name(user) -> str:
 
 def _contribution_id(kwargs: dict):
     return kwargs.get("contributionId") or kwargs.get("contribution_id")
+
+
+_logger = logging.getLogger("bsw.command")
 
 
 def _error_response(exc: CommandError, correlation_id) -> Response:
@@ -100,10 +106,36 @@ def _dispatch(request, contribution_id, command) -> Response:
         correlation_id=correlation_id,
     )
 
+    started = time.monotonic()
+    operation = getattr(command, "__name__", "command")
+
+    def _log(result: str, *, level: int = logging.INFO, error_code=None) -> None:
+        # Structured completion line on the two-phase-payment path (specs/16 §16.2) — the
+        # money path previously emitted nothing.
+        log_event(
+            _logger,
+            level,
+            "command completed",
+            operation=operation,
+            entityId=contribution_id,
+            result=result,
+            durationMs=round((time.monotonic() - started) * 1000),
+            correlationId=ctx.correlation_id,
+            idempotencyKey=ctx.idempotency_key,
+            errorCode=error_code,
+        )
+
     try:
         result = command(contribution_id, ctx)
     except CommandError as exc:
+        in_progress = exc.http_status == 202
+        _log(
+            "IN_PROGRESS" if in_progress else "ERROR",
+            level=logging.INFO if in_progress else logging.WARNING,
+            error_code=None if in_progress else exc.code,
+        )
         return _error_response(exc, correlation_id)
+    _log("OK")
     return Response(result, status=200)
 
 

@@ -104,7 +104,7 @@ function handleToken(user: User | null): void {
     wasAuthed = true;
     intentionalSignOut = false;
     // Resolve the role from the claim BEFORE flipping to `authed`, so the transition is
-    // atomic (user + role together) and RoleGate affordances never flash with a null role.
+    // atomic (user + role together) so role-gated affordances never flash with a null role.
     // Fire-and-forget: both outcomes are handled below, so there is no unhandled rejection.
     void user.getIdTokenResult().then(
       (result) => {

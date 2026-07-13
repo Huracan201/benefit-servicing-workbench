@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-This is the spec-driven **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **Phases 1–3 are built, QA'd, and merged to `main`** (PRs #1–#3, #5, each CI-green + CodeRabbit-reviewed); a read-only security review + its quick-win hardening also merged (PR #4). **Phase 4 (the Workbench UI) is up:** part 1 — the design system + the dashboard + loan portfolio — merged (PR #6); **part 2 — the loan/benefit detail screen, the payment/exception worklists, a minimal emulator auth surface, and the Playwright critical-path e2e — is on `release/phase-4-part-2` (PR #7: CI 6/6 green incl. e2e 5/5, CodeRabbit addressed)**. Next is deploy (`U12`).
+This is the spec-driven **BenefitServicing Workbench** — an operations platform for servicing employer-sponsored student-loan repayment benefits. **Phases 1–3 are built, QA'd, and merged to `main`** (PRs #1–#3, #5, each CI-green + CodeRabbit-reviewed); a read-only security review + its quick-win hardening also merged (PR #4). **Phase 4 (the Workbench UI) is up:** part 1 — the design system + the dashboard + loan portfolio — merged (PR #6); **part 2 — the loan/benefit detail screen, the payment/exception worklists, a minimal emulator auth surface, and the Playwright critical-path e2e — merged (PR #7)**. **Phase 5** (the Phase 3+4 adversarial security review — no CRITICAL/HIGH/MED — plus its hardening: `If-Match` enforcement, security headers, correlation-id sanitization, the money-path logging) is merged (PR #8). Next is **Phase 6 — deployment** (`U12`).
 
 What exists today:
 - `specs/` — 22 numbered spec docs + `21-deployment-and-operations.md` + `openapi.yaml` (the authoritative API contract) + `wireframes.html`. Start at [`specs/README.md`](specs/README.md) — the index, reading order, and normative global conventions. `appendix-a`/`appendix-b` trace the spec review history; [`specs/engineering-reports/`](specs/engineering-reports/) records each phase's build + QA.
@@ -19,7 +19,7 @@ What exists today:
   - Built on the Phase-1 scaffold (App Router + TS + Tailwind, the emulator-aware Firebase client + `useDocument`/`useCollectionPage` hooks, typed enums).
 - `.github/workflows/ci.yml` + `.spectral.yaml` — CI: a `detect` job gates the backend/frontend/e2e jobs on file presence; backend + frontend are **active** (the emulator step `cd backend` so Django discovers the tests).
 
-Next work is [specs/19 §19.2](specs/19-delivery-and-scope.md): **deploy** (`U12`) — provision the Cloud Tasks queues + Cloud Scheduler crons (`infrastructure/`) and flip readiness from `not_configured` to `configured`; then the deferred `propagate-denormalized` fan-out (`U13`, awaiting its producer command) and `docs/demo-script.md`. The application stack itself is built — the backend command + async layer and Phase 4 part 1 are merged to `main`; part 2 is CI-green on PR #7 (awaiting merge).
+Next work is [specs/19 §19.2](specs/19-delivery-and-scope.md): **deploy** (`U12`) — provision the Cloud Tasks queues + Cloud Scheduler crons (`infrastructure/`) and flip readiness from `not_configured` to `configured`; then the deferred `propagate-denormalized` fan-out (`U13`, awaiting its producer command) and `docs/demo-script.md`. The application stack itself — the backend command + async layer and the full operator workbench — is built, merged, security-reviewed, and hardened (Phases 1–5 on `main`).
 
 ## Commands that work today
 
