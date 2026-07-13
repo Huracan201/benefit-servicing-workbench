@@ -60,8 +60,9 @@ gunicorn config.wsgi:application --bind 0.0.0.0:8000 --reload
 ```
 
 Operational endpoints: `GET /health` (liveness), `GET /readiness`
-(dependencies reachable). The `/api/v1/` (business commands) and `/internal/`
-(task + scheduler handlers) prefixes are reserved and land in Phase 2.
+(dependencies reachable). `/api/v1/` (business commands, Phase 2) and
+`/internal/` (OIDC-gated Cloud Tasks + Scheduler handlers, Phase 3) are wired;
+fire a scheduler job locally with `manage.py run_job <name>`.
 
 ## Tests
 

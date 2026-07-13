@@ -114,10 +114,11 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Charts row — stacks below ~1100px */}
+      {/* Charts row — stacks below ~1100px; flow chart gets the wider 1.3fr column
+          (U5 wireframe), status mix the 1fr column. */}
       <section
         aria-label="Portfolio charts"
-        className="grid grid-cols-1 gap-3 min-[1101px]:grid-cols-2"
+        className="grid grid-cols-1 gap-3 min-[1101px]:grid-cols-[1.3fr_1fr]"
       >
         <FlowChartCard
           points={series.points}

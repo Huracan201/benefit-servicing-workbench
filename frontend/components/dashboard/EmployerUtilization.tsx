@@ -27,7 +27,9 @@ export function EmployerUtilization({
   return (
     <Card title="Employer commitment utilization" meta="posted / committed">
       <SectionError error={error} context="employer utilization" />
-      {error ? null : loading && empty ? (
+      {/* Skeleton while loading with no rows yet; the empty state only appears once
+          the subscription has resolved (loading === false ⇒ empty is authoritative). */}
+      {error ? null : loading && employers.length === 0 ? (
         <RowsSkeleton rows={4} />
       ) : empty ? (
         <p className="py-6 text-center text-sm text-ink-3">No employer programs.</p>

@@ -2,7 +2,7 @@
 
 An operations platform for servicing **employer-sponsored student-loan repayment benefits**: benefit activation, employer-funded contribution schedules, simulated payment processing with real transactional/idempotency/recovery controls, employment-change cascades, exception handling, and an immutable audit timeline. Firestore is the primary system of record; a Django command backend owns every write; a Next.js workbench subscribes read-only in real time.
 
-**Status: Phase 2 command layer (part 1) built.** Phase 1 foundation is merged to `main` (`backend/` Django + DRF, Firestore-only; `frontend/` Next.js; the framework-free `backend/common/` core with **60 passing unit tests**). Phase 2 — the **domain command layer**: benefit activation, the two-phase payment (with idempotency, immutable servicing events, and crash/fence recovery) — is built and QA-verified on `release/phase-2` (+15 integration/unit tests), pending CI + merge. Async workers (Phase 3) and real screens (Phase 4) are next, per [specs/19](specs/19-delivery-and-scope.md). Per-phase [engineering reports](specs/engineering-reports/) track what shipped.
+**Status: Phases 1–3 merged; Phase 4 (Workbench UI) part 1 in review.** Phases 1 (the framework-free `backend/common/` core, 60 unit tests + the scaffold), 2 (the full **domain command layer** — activation, the two-phase payment, suspend/resume/terminate, employment cascade, exceptions, notes, admin), and 3 (the **async layer** — OIDC-gated Cloud Tasks/Scheduler handlers behind a 202-cloud/200-inline completion protocol, a reconciliation sweeper + lease reaper, and recompute-from-source read-model projections) are built, QA'd, and merged to `main` (PRs #1–#3, #5, each CI-green + CodeRabbit-reviewed; a read-only security review + its hardening also merged, PR #4). **Phase 4 part 1** — the *ledger + control room* design system + the dashboard + loan portfolio — is on `release/phase-4` (PR #6); part 2 (the loan detail screen, the worklists, polish/e2e) is next, per [specs/19](specs/19-delivery-and-scope.md). Per-phase [engineering reports](specs/engineering-reports/) track what shipped.
 
 ## Start here
 
@@ -30,8 +30,8 @@ cd firebase && firebase emulators:start --project=demo-benefitservicing-workbenc
 npx @stoplight/spectral-cli lint specs/openapi.yaml --fail-severity=error
 ```
 
-The backend core tests run offline (`cd backend && python -m unittest discover -s common/tests -p 'test_*.py' -t .`); the Django command layer (`manage.py check`, `--tag=unit`) and the emulator integration tests (activation, the two-phase payment, the crown-jewel concurrency + fencing gates) run on CI. `.github/workflows/ci.yml` gates the backend/frontend/e2e jobs on file presence — backend + frontend are active.
+The backend core tests run offline (`cd backend && python -m unittest discover -s common/tests -p 'test_*.py' -t .`); the Django command + async layer (`manage.py check`, `--tag=unit`, and the emulator integration suite — activation, the two-phase payment, the concurrency + fencing gates, the reconciliation sweeper + lease reaper, and the projection flows) plus the frontend (`npm run lint|test|build`) run on CI. `.github/workflows/ci.yml` gates the backend/frontend/e2e jobs on file presence — backend + frontend are active.
 
-## Planned artifacts (not yet present)
+## Not yet built
 
-The remaining Phase-2 commands (suspend/terminate/employment cascade/exception workflow/notes), Phase 3 async (`infrastructure/` queue + scheduler IaC, `scripts/e2e.sh`, read-model projections), Phase 4 UI screens, and `docs/demo-script.md`. The spec set, `backend/` (foundation + activation/payment command layer), `frontend/` scaffold, and `docker-compose.yml` exist.
+**Phase 4 part 2** — the loan/benefit detail screen (wired to the command client), the payment queue + exception workbench, and a polish/a11y/e2e pass (with a committed lockfile so the Playwright job runs). Then deploy-time IaC (`infrastructure/` — the Cloud Tasks queues + Cloud Scheduler crons + the readiness flip), the `propagate-denormalized` task (awaiting its producer command), and `docs/demo-script.md`.

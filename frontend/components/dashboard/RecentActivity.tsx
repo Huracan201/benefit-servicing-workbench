@@ -22,7 +22,6 @@ export function RecentActivity({
   events,
   loading,
   error,
-  empty,
 }: RecentActivityProps) {
   const items: TimelineItem[] = events.map((ev) => ({
     id: ev.id,
@@ -35,7 +34,9 @@ export function RecentActivity({
   return (
     <Card title="Recent servicing activity" meta="live timeline">
       <SectionError error={error} context="the activity feed" />
-      {error ? null : loading && empty ? (
+      {/* Skeleton while loading with nothing yet — never flash the "no activity"
+          empty state before the first snapshot resolves. */}
+      {error ? null : loading && events.length === 0 ? (
         <RowsSkeleton rows={4} />
       ) : (
         <Timeline items={items} emptyMessage="No recent activity." />

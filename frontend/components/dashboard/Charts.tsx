@@ -33,7 +33,6 @@ export interface FlowChartCardProps {
 }
 
 export function FlowChartCard({ points, loading, error, empty }: FlowChartCardProps) {
-  const peak = Math.max(0, ...points.flatMap((p) => [p.scheduledCents, p.postedCents]));
   return (
     <Card title="Monthly scheduled vs. posted" meta="last 6 months">
       <SectionError error={error} context="the monthly flow chart" />
@@ -53,7 +52,10 @@ export function FlowChartCard({ points, loading, error, empty }: FlowChartCardPr
           aToken="info"
           bToken="good"
           height={150}
-          note={`peak ${formatCents(peak)}`}
+          // Quantitative $-axis (U5 wireframe): 3 gridlines from 0 → max, labels from
+          // formatCents (values kept in integer cents until the render boundary).
+          valueTicks={3}
+          formatValue={formatCents}
         />
       )}
     </Card>

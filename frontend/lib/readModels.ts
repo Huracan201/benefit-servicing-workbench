@@ -197,8 +197,9 @@ export type LoanWorkbenchSort =
   /** orderBy nextContributionDate ASC — REQUIRES the `benefitStatus` filter
    *  (index: benefitStatus, nextContributionDate). */
   | "nextContribution"
-  /** orderBy openExceptionCount DESC, updatedAt DESC — use with NO equality
-   *  filters (index: openExceptionCount, updatedAt). */
+  /** where openExceptionCount > 0, then orderBy openExceptionCount DESC, updatedAt
+   *  DESC — returns ONLY loans with an open exception; use with NO equality filters
+   *  (index: openExceptionCount, updatedAt). */
   | "openExceptions";
 
 /**
@@ -233,6 +234,11 @@ function buildLoanWorkbenchConstraints(f: LoanWorkbenchFilters): QueryConstraint
       parts.push(orderBy("nextContributionDate", "asc"));
       break;
     case "openExceptions":
+      // Restrict to loans that actually HAVE an open exception (not the whole
+      // portfolio re-sorted). Firestore allows an inequality + orderBy on the SAME
+      // leading field; the (openExceptionCount DESC, updatedAt DESC) composite index
+      // already serves this — no new index required.
+      parts.push(where("openExceptionCount", ">", 0));
       parts.push(orderBy("openExceptionCount", "desc"));
       parts.push(orderBy("updatedAt", "desc"));
       break;
