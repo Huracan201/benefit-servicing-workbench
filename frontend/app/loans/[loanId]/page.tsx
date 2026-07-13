@@ -179,9 +179,44 @@ export default function LoanAccountPage({
 
   // --- Full account screen ---
 
+  // The loan loaded, but any subordinate SOURCE subscription can still fail (a denied rule, a
+  // missing index, a transient error). Aggregate those into one non-blocking banner so a failed
+  // read stays visibly DISTINCT from a genuine empty state — on an ops screen driving payment /
+  // exception decisions, "No operational exceptions" must never silently mean "the exceptions
+  // query errored" (specs/15 §15.2).
+  const subordinateErrors = (
+    [
+      ["Borrower", borrower.error],
+      ["Benefit agreement", agreement.error],
+      ["Contribution schedule", contributions.error],
+      ["Payment attempts", attempts.error],
+      ["Operational exceptions", exceptions.error],
+      ["Servicing timeline", events.error],
+      ["Notes", notes.error],
+    ] as Array<[string, Error | null]>
+  ).filter((entry): entry is [string, Error] => entry[1] != null);
+
   return (
     <div className="space-y-4">
       <BackLink />
+
+      {subordinateErrors.length > 0 ? (
+        <div
+          role="alert"
+          className="rounded border border-critical/[0.4] bg-critical/[0.08] px-4 py-3"
+        >
+          <p className="text-xs font-semibold text-critical">
+            Some panels failed to load — the data shown below may be incomplete.
+          </p>
+          <ul className="mt-1 space-y-0.5 text-xs text-ink-2">
+            {subordinateErrors.map(([label, err]) => (
+              <li key={label}>
+                <span className="font-medium text-ink">{label}:</span> {err.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <AccountHeader
         loan={loanData}

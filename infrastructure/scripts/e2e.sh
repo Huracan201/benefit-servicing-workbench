@@ -45,8 +45,11 @@ trap cleanup EXIT
 echo "[e2e] waiting for the command API to accept connections…"
 for i in $(seq 1 60); do
   # Any HTTP response (even a 404) proves Django's routes are loaded and it is accepting
-  # connections; "000" is curl's code for "no connection yet".
-  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/readiness" || echo 000)"
+  # connections; "000" is curl's code for "no connection yet". curl already writes "000" on a
+  # refused connection AND exits non-zero — so use `|| true` (not `|| echo 000`, which would
+  # APPEND a second "000" → "000000" and falsely read as ready) and default an empty capture.
+  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/readiness" 2>/dev/null || true)"
+  code="${code:-000}"
   if [ "${code}" != "000" ]; then
     echo "[e2e] command API is up (HTTP ${code})."
     break

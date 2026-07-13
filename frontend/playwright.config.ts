@@ -46,6 +46,9 @@ export default defineConfig({
     // already-running server is reused). Emulator-wired + the correct API base (NOTE: the
     // command client appends `/api/v1`, so the base must NOT include it).
     env: {
+      // `next dev` binds $PORT — pass it so a custom PLAYWRIGHT_PORT actually starts the
+      // server on the port BASE_URL (and the `url` above) waits on, instead of default 3000.
+      PORT,
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-benefitservicing-workbench",
       NEXT_PUBLIC_FIREBASE_API_KEY: "demo-api-key",
       NEXT_PUBLIC_USE_FIREBASE_EMULATOR: "true",

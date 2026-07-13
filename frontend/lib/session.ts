@@ -165,9 +165,11 @@ async function performSignOut(): Promise<void> {
   try {
     await firebaseSignOut(getFirebaseAuth());
   } catch {
-    // If sign-out failed the token never cleared; clear the intent so a genuine later
-    // expiry is still reported as `expired`.
+    // If sign-out failed the token never cleared and the user is still authed, so restore
+    // BOTH flags: clear the intent and re-mark `wasAuthed` so a genuine later expiry is
+    // still reported as `expired` (not misclassified `anonymous`).
     intentionalSignOut = false;
+    wasAuthed = true;
   }
 }
 
