@@ -19,7 +19,7 @@ What exists today:
   - Built on the Phase-1 scaffold (App Router + TS + Tailwind, the emulator-aware Firebase client + `useDocument`/`useCollectionPage` hooks, typed enums).
 - `.github/workflows/ci.yml` + `.spectral.yaml` — CI: a `detect` job gates the backend/frontend/e2e jobs on file presence; backend + frontend are **active** (the emulator step `cd backend` so Django discovers the tests).
 
-Next work is [specs/19 §19.2](specs/19-delivery-and-scope.md): **deploy** (`U12`) — provision the Cloud Tasks queues + Cloud Scheduler crons (`infrastructure/`) and flip readiness from `not_configured` to `configured`; then the deferred `propagate-denormalized` fan-out (`U13`, awaiting its producer command) and `docs/demo-script.md`. The application stack itself — the backend command + async layer and the full operator workbench (dashboard, portfolio, detail, worklists) — is built and merged/green.
+Next work is [specs/19 §19.2](specs/19-delivery-and-scope.md): **deploy** (`U12`) — provision the Cloud Tasks queues + Cloud Scheduler crons (`infrastructure/`) and flip readiness from `not_configured` to `configured`; then the deferred `propagate-denormalized` fan-out (`U13`, awaiting its producer command) and `docs/demo-script.md`. The application stack itself is built — the backend command + async layer and Phase 4 part 1 are merged to `main`; part 2 is CI-green on PR #7 (awaiting merge).
 
 ## Commands that work today
 

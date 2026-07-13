@@ -38,4 +38,4 @@ The backend core tests run offline (`cd backend && python -m unittest discover -
 
 ## Not yet built
 
-**Deploy-time IaC** (`infrastructure/` — the Cloud Tasks queues + Cloud Scheduler crons + the readiness flip to `configured`, `U12`), the `propagate-denormalized` fan-out task (`U13`, awaiting its producer command), and `docs/demo-script.md`. The whole application stack — backend command + async layer and the full operator workbench (dashboard, portfolio, detail, worklists) — is built and merged/green.
+**Deploy-time IaC** (`infrastructure/` — the Cloud Tasks queues + Cloud Scheduler crons + the readiness flip to `configured`, `U12`), the `propagate-denormalized` fan-out task (`U13`, awaiting its producer command), and `docs/demo-script.md`. The whole application stack is built — the backend command + async layer and Phase 4 part 1 are merged to `main`; part 2 is CI-green on PR #7 (awaiting merge).

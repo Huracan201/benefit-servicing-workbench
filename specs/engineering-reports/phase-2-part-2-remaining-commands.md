@@ -133,7 +133,7 @@ All found in second-pass QA; all fixed and lead-verified.
 
 ## 10. What's next
 
-Commit → PR → CI (the real emulator run for all 5 flows) → CodeRabbit → merge. That completes the **Phase-2 command layer**. Then **Phase 3**: move the inline helpers onto Cloud Tasks + Cloud Scheduler (durable retry closes the crash gap fully), add the reconciliation/reaper jobs, and build the read-model projections.
+*(Written pre-merge.)* The plan — commit → PR → CI (the real emulator run for all 5 flows) → CodeRabbit → merge — **completed via PR #3 (`abf3d33`)**, finishing the **Phase-2 command layer**. **Phase 3** then moved the inline helpers onto Cloud Tasks + Cloud Scheduler (durable retry closing the crash gap fully), added the reconciliation/reaper jobs, and built the read-model projections — shipped as PR #5.
 
 ---
 

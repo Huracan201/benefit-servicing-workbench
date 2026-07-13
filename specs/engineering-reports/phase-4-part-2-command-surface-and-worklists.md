@@ -31,7 +31,7 @@ Supporting layers:
 
 ## 3. Process
 
-Same loop as every prior phase — with **one upgrade**: this session's sandbox had a working `npm` + network + JDK, so unlike the backend phases (where CI was the only validator) the frontend was **verified locally by running** — `npm run typecheck && lint && test && build`, and `npm ci` against the committed lockfile — before the first push.
+Same loop as every prior phase — with **one upgrade**: this session's sandbox had a working `npm` + network + JDK, so unlike the backend phases (where CI was the only validator) the frontend was **verified locally by running** — `npm run typecheck && npm run lint && npm run test && npm run build`, and `npm ci` against the committed lockfile — before the first push.
 
 1. **Understand → design** (read-only multi-agent workflow): parallel readers mapped the detail-screen regions, the command surface, and the worklists; the synthesis returned 8 build units + the write-path contract + the consequential decisions, which were taken to the user (auth surface, assignee display, e2e scope) **before** the build.
 2. **Build in dependency-ordered slices** (multi-agent workflow, disjoint file ownership): Foundations (engine + read layer + auth, 3 parallel) → Affordances → Screens (detail + payments + exceptions, 3 parallel) → Polish + lockfile → e2e. 42 files, zero cross-unit collisions.

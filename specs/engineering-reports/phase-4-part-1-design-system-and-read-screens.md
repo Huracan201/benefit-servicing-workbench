@@ -30,7 +30,7 @@ Two properties thread the build: **CQRS is honored end-to-end** — screens READ
 
 **Slice B — read screens.** A typed read-model access layer (`lib/readModels.ts`) over the existing subscription hooks; the **dashboard** (8 KPI tiles, scheduled-vs-posted + status-mix + exceptions-by-type charts, employer utilization meters, live activity timeline); the **loan portfolio** (filterable, cursor-paginated real-time table with the non-combinable has-open-exception filter).
 
-**Part 2 (next):** the loan/benefit detail screen (the command surface), the payment queue + exception workbench (role-gated actions), and polish + a11y + a committed lockfile + Playwright e2e. Row clicks in part 1 land on a minimal stub `/loans/[loanId]` route that part 2 fleshes out.
+**Part 2 (delivered in PR #7):** the loan/benefit detail screen (the command surface), the payment queue + exception workbench (role-gated actions), and polish + a11y + a committed lockfile + Playwright e2e. Row clicks in part 1 landed on a minimal stub `/loans/[loanId]` route that part 2 fleshed out.
 
 ---
 
@@ -76,7 +76,7 @@ Two properties thread the build: **CQRS is honored end-to-end** — screens READ
 | CI backend + Firestore rules + OpenAPI (unchanged) | ✅ green |
 | Per-slice adversarial QA (4 dimensions + per-finding verification) | ✅ findings fixed |
 | Offline static consistency review (imports/types/token-wiring/field-drift) | ✅ per slice |
-| Playwright e2e | deferred to part 2 (needs a committed lockfile for `npm ci`) |
+| Playwright e2e | deferred to part 2 — since **shipped in PR #7** (committed lockfile + `infrastructure/scripts/e2e.sh`) |
 
 **Tests added:** command-client unit tests (202 same-key poll, Retry-After, error mapping, unauthenticated pre-flight) and component-kit tests. The offline sandbox cannot run `npm`/`tsc`/`next`, so CI is the compilation authority — the reason each slice was pushed and iterated to green.
 
@@ -107,15 +107,15 @@ Two properties thread the build: **CQRS is honored end-to-end** — screens READ
 
 ## 9. Known limitations (by design)
 
-- **Part 2 is not built:** the loan/benefit detail screen (the command surface), the payment queue + exception workbench, and the polish/a11y/e2e pass. Row clicks land on a stub `/loans/[loanId]`.
-- **No committed lockfile yet**, so the Playwright e2e job stays skipped until part 2 commits `package-lock.json` and switches it to `npm ci`.
-- The legacy `StatusBadge` on the remaining stub pages (payments/exceptions) is untouched — those pages are replaced in part 2.
+- **Part 2 was not built at part-1 ship** (since delivered in **PR #7**): the loan/benefit detail screen (the command surface), the payment queue + exception workbench, and the polish/a11y/e2e pass. Row clicks landed on a stub `/loans/[loanId]` — now the real screen.
+- **No committed lockfile at part-1 ship**, so the Playwright e2e job stayed skipped — part 2 committed `package-lock.json`, switched CI to `npm ci`, and activated the job.
+- The legacy `StatusBadge` on the then-stub pages (payments/exceptions) was untouched — those pages were replaced in part 2.
 
 ---
 
 ## 10. What's next
 
-Ship part 1 (PR #6): mark ready → CodeRabbit → merge. Then **Phase 4 part 2**: the loan/benefit detail screen wired to the command client (process/retry/suspend/resume/terminate/employment/notes with confirm dialogs + optimistic-concurrency `If-Match`), the payment queue + exception workbench (role-gated actions), and the polish/a11y/lockfile/Playwright pass.
+*(Written pre-merge.)* Part 1 shipped as **PR #6 (`1d25e62`)**. **Phase 4 part 2** — the loan/benefit detail screen wired to the command client (process/retry/suspend/resume/terminate/employment/notes with confirm dialogs + optimistic-concurrency `If-Match`), the payment queue + exception workbench (role-gated actions), and the polish/a11y/lockfile/Playwright pass — then shipped as [**PR #7**](./phase-4-part-2-command-surface-and-worklists.md).
 
 ---
 

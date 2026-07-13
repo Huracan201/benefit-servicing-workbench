@@ -73,8 +73,9 @@ The Firebase client is emulator-aware. For local dev against the emulator suite:
 | `NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST` | `localhost:8080` |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` (the command client appends `/api/v1`) |
 
-Sign in on `/signin` with a seeded demo account (`ops@ / mgr@ / admin@demo.test`,
-[backend/seed/users.py](../backend/seed/users.py)).
+Sign in on `/signin` with a seeded demo account — `ops@demo.test`,
+`mgr@demo.test`, or `admin@demo.test`
+([backend/seed/users.py](../backend/seed/users.py)).
 
 ## Verification
 

@@ -152,7 +152,7 @@ All found in second-pass QA; all fixed and lead-verified.
 
 ## 10. What's next
 
-The immediate next step is the CI emulator run (the real proof of the two-phase payment under genuine Firestore transactions and thread contention), then merge. After that: the remaining Phase-2 commands (suspend/terminate/employment/exceptions/notes), then Phase 3 (Cloud Tasks + Scheduler + projections).
+*(Written pre-merge.)* The next step was the CI emulator run — the real proof of the two-phase payment under genuine Firestore transactions and thread contention — then merge: **done via PR #2 (`c6671ce`)**. The remaining Phase-2 commands (suspend/terminate/employment/exceptions/notes) then shipped in [part 2](./phase-2-part-2-remaining-commands.md) (PR #3), and Phase 3 (Cloud Tasks + Scheduler + projections) as PR #5.
 
 ---
 
