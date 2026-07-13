@@ -262,7 +262,13 @@ export async function sendCommand<TRes>(
   path: string,
   init: SendCommandInit = {},
 ): Promise<CommandOutcome<TRes>> {
-  const { body, expectedRevision, correlationId, signal, maxPolls = DEFAULT_MAX_POLLS } = init;
+  const { body, expectedRevision, correlationId, signal } = init;
+  // Normalize the poll budget to a safe finite integer: a negative/NaN value would make
+  // the loop never run (no request sent), and Infinity could poll forever on 202s.
+  const maxPolls =
+    typeof init.maxPolls === "number" && Number.isFinite(init.maxPolls)
+      ? Math.max(0, Math.floor(init.maxPolls))
+      : DEFAULT_MAX_POLLS;
   const idempotencyKey = init.idempotencyKey ?? newIdempotencyKey();
   const token = await resolveToken();
 
@@ -295,6 +301,9 @@ export async function sendCommand<TRes>(
       throw new CommandError({
         code: "NETWORK_ERROR",
         serverMessage: error instanceof Error ? error.message : null,
+        // Hand the resolved key back: the server may already have accepted the command,
+        // so a retry MUST reuse this key (specs/08), never mint a fresh one.
+        idempotencyKey,
       });
     }
 

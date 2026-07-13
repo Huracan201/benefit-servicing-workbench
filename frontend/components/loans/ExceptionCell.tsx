@@ -31,7 +31,7 @@ export function ExceptionCell({ count, severityRank }: ExceptionCellProps) {
       title={`${count} open exception${plural}${severityLabel ? ` · ${severityLabel}` : ""}`}
     >
       <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${solidBg(token)}`} />
-      <span>{count}</span>
+      <span aria-hidden="true">{count}</span>
       <span className="sr-only">
         {count} open exception{plural}
         {severityLabel ? `, ${severityLabel} severity` : ""}

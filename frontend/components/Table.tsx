@@ -66,7 +66,12 @@ export function Table<T>({
 
   return (
     <div className="overflow-x-auto rounded border border-border bg-surface">
-      <table className="w-full border-collapse text-body">
+      {loading ? (
+        <span role="status" className="sr-only">
+          Loading {caption ?? "table"}
+        </span>
+      ) : null}
+      <table aria-busy={loading || undefined} className="w-full border-collapse text-body">
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <thead>
           <tr className="border-b border-border bg-surface-2">

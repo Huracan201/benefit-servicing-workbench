@@ -8,7 +8,7 @@
 // safe) and blocks activation. Forwards its ref to the inner <button> (used e.g. by
 // ConfirmDialog to move focus to the primary action).
 
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useId, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 export type ButtonVariant = "primary" | "danger" | "ghost";
 
@@ -48,6 +48,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   },
   ref,
 ) {
+  // Stable id linking the button to its lockedReason tooltip so AT announces WHY it's
+  // disabled (the tooltip is otherwise visual-only, surfaced on hover/focus).
+  const lockedReasonId = useId();
   // `inert` blocks activation for any reason; `hardDisabled` is the real attribute
   // (locked stays focusable so its tooltip is reachable by hover + keyboard).
   const inert = locked || loading || disabled === true;
@@ -60,6 +63,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         type={type}
         aria-disabled={inert || undefined}
         aria-busy={loading || undefined}
+        aria-describedby={locked && lockedReason ? lockedReasonId : rest["aria-describedby"]}
         disabled={hardDisabled}
         onClick={(e) => {
           if (inert) {
@@ -108,6 +112,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       </button>
       {locked && lockedReason ? (
         <span
+          id={lockedReasonId}
           role="tooltip"
           className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink-2 shadow-elevation group-hover:block group-focus-within:block"
         >

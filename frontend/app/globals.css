@@ -51,6 +51,7 @@
 /* Dark palette, shared by the OS-preference and explicit-toggle selectors. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --accent: 43 179 163;
     --accent-ink: 8 18 15;
     --bg: 11 17 16;
@@ -73,6 +74,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --accent: 43 179 163;
   --accent-ink: 8 18 15;
   --bg: 11 17 16;
@@ -95,6 +97,7 @@
 
 /* Explicit light toggle re-asserts the light palette even when the OS is dark. */
 :root[data-theme="light"] {
+  color-scheme: light;
   --accent: 14 124 113;
   --accent-ink: 255 255 255;
   --bg: 233 238 237;
@@ -115,9 +118,11 @@
   --shadow: 0 1px 2px rgb(23 32 31 / 0.05), 0 6px 16px -8px rgb(23 32 31 / 0.12);
 }
 
-/* Base document surface. Digits align everywhere (ledgers), body size = 13px. */
+/* Base document surface. Digits align everywhere (ledgers), body size = 13px.
+   `color-scheme` follows the SAME selectors as the tokens above (not the OS), so
+   native controls + scrollbars track the viewer's toggle both ways. */
 html {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {

@@ -39,8 +39,14 @@ function isRole(value: string | null): value is Role {
 
 function storedRole(): Role | null {
   if (typeof window === "undefined") return null;
-  const v = window.localStorage.getItem(VIEW_AS_ROLE_STORAGE_KEY);
-  return isRole(v) ? v : null;
+  try {
+    const v = window.localStorage.getItem(VIEW_AS_ROLE_STORAGE_KEY);
+    return isRole(v) ? v : null;
+  } catch {
+    // Storage blocked (private mode): fall back to the default role (matches the write
+    // path, which already tolerates storage failures).
+    return null;
+  }
 }
 
 export function TopBar() {

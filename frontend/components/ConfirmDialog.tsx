@@ -6,7 +6,7 @@
 // restored to the previously-focused element on close. Enter/exit motion is disabled
 // under prefers-reduced-motion. `tone="danger"` styles the confirm action.
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import Button from "@/components/Button";
 
 export interface ConfirmDialogProps {
@@ -41,7 +41,9 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
-  const titleId = useRef(`confirm-${Math.random().toString(36).slice(2)}`).current;
+  // useId() gives a stable, SSR/client-consistent id (Math.random() could mismatch on
+  // hydration and break the aria-labelledby/aria-describedby linkage on first render).
+  const titleId = useId();
   const descId = `${titleId}-desc`;
 
   // Latest values for the stable keydown handler below, so the listener never has to

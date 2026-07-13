@@ -143,6 +143,12 @@ export interface CommandErrorInit {
   correlationId?: string | null;
   /** Seconds hinted by a `Retry-After` header (e.g. on 429). */
   retryAfterSeconds?: number | null;
+  /**
+   * The Idempotency-Key the failed command carried, when known. Preserved on transport
+   * failures so a caller can retry with the SAME key (specs/08) — a fresh key could
+   * replay a mutation the server may already have accepted.
+   */
+  idempotencyKey?: string | null;
 }
 
 /**
@@ -156,6 +162,7 @@ export class CommandError extends Error {
   readonly userMessage: string;
   readonly correlationId: string | null;
   readonly retryAfterSeconds: number | null;
+  readonly idempotencyKey: string | null;
 
   constructor(init: CommandErrorInit) {
     const userMessage = humanMessageForCode(init.code);
@@ -167,6 +174,7 @@ export class CommandError extends Error {
     this.userMessage = userMessage;
     this.correlationId = init.correlationId ?? null;
     this.retryAfterSeconds = init.retryAfterSeconds ?? null;
+    this.idempotencyKey = init.idempotencyKey ?? null;
     // Restore the prototype chain so `instanceof CommandError` survives transpilation.
     Object.setPrototypeOf(this, CommandError.prototype);
   }

@@ -81,7 +81,7 @@ export function StatusMixCard({ current, loading, error }: StatusMixCardProps) {
   return (
     <Card
       title="Contribution status mix"
-      meta={loading ? undefined : `${fmtCount(mixTotal)} this cycle`}
+      meta={loading || error ? undefined : `${fmtCount(mixTotal)} this cycle`}
     >
       <SectionError error={error} context="the status mix" />
       {error ? null : loading ? (

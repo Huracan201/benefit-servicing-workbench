@@ -3,9 +3,8 @@
 // security boundary: Django authorizes every write and Firestore rules authorize
 // reads. Never gate data exposure on this — only affordances.
 //
-// `requires` is the minimum role (by ROLE_RANK). When the viewer is under it:
-//   mode="hide"    -> render `fallback` (default: nothing)
-//   mode="fallback"-> same as hide but expects a provided fallback (e.g. a locked Button)
+// `requires` is the minimum role (by ROLE_RANK). When the viewer is under it, `fallback`
+// is rendered instead of `children` (default: nothing) — e.g. a locked Button.
 
 import type { ReactNode } from "react";
 import { ROLE_RANK, type Role } from "@/lib/types";

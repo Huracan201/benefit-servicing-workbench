@@ -74,6 +74,10 @@ function isActive(pathname: string, href: string): boolean {
 export function Nav({ counts = PLACEHOLDER_COUNTS }: NavProps) {
   const pathname = usePathname() ?? "/";
   return (
+    // Desktop-first by design: the Workbench is a dense operations console (desktop
+    // wireframes, wide data tables), so this sidebar is intentionally hidden below `md`.
+    // A mobile navigation path (drawer / bottom nav) is out of scope for Phase 4 part 1
+    // and owned by a later responsive pass.
     <nav
       aria-label="Primary"
       className="col-start-1 row-start-2 hidden flex-col border-r border-border bg-surface px-2.5 py-3 md:flex"

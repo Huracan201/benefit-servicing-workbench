@@ -19,8 +19,14 @@ function systemTheme(): Theme {
 
 function storedTheme(): Theme | null {
   if (typeof window === "undefined") return null;
-  const v = window.localStorage.getItem(STORAGE_KEY);
-  return v === "light" || v === "dark" ? v : null;
+  try {
+    const v = window.localStorage.getItem(STORAGE_KEY);
+    return v === "light" || v === "dark" ? v : null;
+  } catch {
+    // Storage blocked (private mode / disabled cookies): fall back to OS-follow so the
+    // mount effect still installs the prefers-color-scheme listener below.
+    return null;
+  }
 }
 
 export function ThemeToggle({ className }: { className?: string }) {

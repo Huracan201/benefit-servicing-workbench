@@ -26,8 +26,9 @@ export function Meter({
   valueLabel,
   className,
 }: MeterProps) {
-  const safeMax = max === 0 ? 1 : max;
-  const pct = Math.max(0, Math.min(100, (value / safeMax) * 100));
+  // max <= 0 is an UNKNOWN ratio (e.g. zero-commitment employer), not a full bar:
+  // render 0% so it agrees with the "—" value label callers show in that case.
+  const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   const shownLabel = valueLabel ?? `${Math.round(pct)}%`;
   return (
     <div className={className}>

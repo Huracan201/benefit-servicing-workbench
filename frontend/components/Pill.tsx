@@ -3,14 +3,13 @@
 // color-blindness / grayscale. Color/label are resolved through the shared statusMeta
 // map unless overridden. Not a live region — the visible text is the accessible name.
 
-import type { ReactNode } from "react";
 import { pillClasses, statusMeta, type ColorToken } from "@/components/statusMeta";
 
 export interface StatusPillProps {
   /** Status enum value; also selects the reserved token/label unless overridden. */
   status: string;
-  /** Override the label text (still mandatory — defaults to the mapped label). */
-  label?: ReactNode;
+  /** Override the label text (a non-empty string — blank falls back to the mapped label). */
+  label?: string;
   /** Override the color token; otherwise derived from `status`. */
   token?: ColorToken;
   /** Hide the leading dot (rarely needed). */
@@ -27,7 +26,7 @@ export function StatusPill({
 }: StatusPillProps) {
   const meta = statusMeta(status);
   const resolvedToken = token ?? meta.token;
-  const text = label ?? meta.label;
+  const text = label?.trim() || meta.label;
   return (
     <span
       className={[

@@ -12,8 +12,8 @@ export interface SeverityCellProps {
   title: ReactNode;
   /** Optional secondary line (e.g. entity ref + failure code). */
   subtitle?: ReactNode;
-  /** Override the visible severity label (defaults to the mapped label). */
-  label?: ReactNode;
+  /** Override the visible severity label (a non-empty string — blank falls back to the mapped label). */
+  label?: string;
   className?: string;
 }
 
@@ -45,7 +45,7 @@ export function SeverityCell({
         ) : null}
       </span>
       <span className="shrink-0 text-xs font-semibold text-ink-2">
-        {label ?? meta.label}
+        {label?.trim() || meta.label}
       </span>
     </div>
   );

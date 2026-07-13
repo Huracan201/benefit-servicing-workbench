@@ -58,10 +58,15 @@ function DisabledField({
   allLabel,
 }: DisabledFieldProps) {
   const id = useId();
+  const reasonId = `${id}-reason`;
   return (
     <fieldset
       disabled={disabled}
+      // `title` is a mouse-hover convenience only; the sr-only reason below (linked via
+      // aria-describedby) is what exposes it to AT + keyboard users, who can't reach a
+      // disabled control's title.
       title={disabled ? reason : undefined}
+      aria-describedby={disabled ? reasonId : undefined}
       className={["m-0 border-0 p-0", disabled ? "cursor-not-allowed opacity-50" : ""]
         .filter(Boolean)
         .join(" ")}
@@ -74,6 +79,11 @@ function DisabledField({
         onChange={onChange}
         allLabel={allLabel}
       />
+      {disabled ? (
+        <span id={reasonId} className="sr-only">
+          {reason}
+        </span>
+      ) : null}
     </fieldset>
   );
 }

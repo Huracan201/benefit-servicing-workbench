@@ -72,7 +72,7 @@ Two properties thread the build: **CQRS is honored end-to-end** — screens READ
 
 | Check | Result |
 |-------|--------|
-| CI frontend `lint | test | build` (real `tsc` + lint + `next build` + `next/font` fetch) — every push | ✅ green |
+| CI frontend `npm run lint`, `npm run test`, and `npm run build` (real `tsc` + lint + `next build` + `next/font` fetch) — every push | ✅ green |
 | CI backend + Firestore rules + OpenAPI (unchanged) | ✅ green |
 | Per-slice adversarial QA (4 dimensions + per-finding verification) | ✅ findings fixed |
 | Offline static consistency review (imports/types/token-wiring/field-drift) | ✅ per slice |
@@ -92,7 +92,7 @@ Two properties thread the build: **CQRS is honored end-to-end** — screens READ
 | B | 🟡 MED | The "Has open exception" toggle only **sorted** — it returned the whole portfolio | Added `where("openExceptionCount", ">", 0)` (served by the existing index) |
 | B | 🟡 MED | Collection cards flashed a false empty state on first load; the flow Bar chart didn't fill its card (misaligned labels) | Gate the skeleton on `loading && empty`; `preserveAspectRatio` + restored the $-axis + the 1.3fr/1fr charts row |
 | B | 🟡 MED | Portfolio rows navigated to a not-yet-existent `/loans/[loanId]` (404) | Added a minimal stub detail route (part 2 fleshes it out) |
-| B | 🟢 LOW | Pagination "Next" overshot into an empty page on exact page-size multiples | Treat a zero-row non-first page as the end |
+| B | 🟢 LOW | Pagination "Next" overshot into an empty page on exact page-size multiples | Query one lookahead row (`limit(size + 1)`) in `useCollectionPage`, trim it off the page, and enable "Next" only when that row exists (`hasMore` is exact) |
 
 ---
 

@@ -89,8 +89,8 @@ The layered approach earned its keep on every slice: the CI-reddening throttle-t
 | Adversarial QA (4 reviewers/slice + per-finding verification) | 3 slices | ✅ findings fixed/verified |
 | Slice A emulator + unit (foundation, throttle, authz, `due()`, revoke) | **CI** | ✅ green (PR #5) |
 | Slice B emulator (completion protocol, generate resumability, sweeper, reaper) | **CI** | ✅ green (PR #5) |
-| Slice C emulator (recompute, off-txn, period bucketing, activation→ACTIVE, reconcile→rollups) | **CI** | ⏳ pending commit |
-| `manage.py check` + Django boot (2 new apps: `internal`, `projections`) | **CI** | ✅ (A+B) |
+| Slice C emulator (recompute, off-txn, period bucketing, activation→ACTIVE, reconcile→rollups) | **CI** | ✅ green (PR #5) |
+| `manage.py check` + Django boot (2 new apps: `internal`, `projections`) | **CI** | ✅ (A+B+C) |
 
 **Tests added:** unit tests for the enqueue/dead-letter seam, the SYSTEM authority guard (incl. the unverified→403 and unknown-`min_role`→fail-closed cases), throttling, and the fanout key table; emulator integration tests for generate-schedule resumability, the tail-completion protocol, the reconciliation sweeper, the lease reaper, the paginated scans, recompute correctness (periodLabel bucketing + terminal-exclusion), and the two projection-freshness traces added by the Slice-C fix (inline activation → ACTIVE summary; reconcile-recovered posting → employer/period rollups).
 
@@ -135,13 +135,13 @@ All found by per-slice adversarial QA; all fixed and lead-verified unless marked
 - **`reconcile` INDETERMINATE escalation** bumps `openExceptionCount` without a projection nudge — the open-exception tiles reconcile on the `*/15` rebuild.
 - **`scheduledCents` per-period refresh** is owned by `rebuild-summaries`, not per-event fanout (a single activation spans many periods the event can't enumerate).
 - **`U12` (queue/scheduler provisioning + readiness flip)** and **`U13` (propagate-denormalized)** are out of this phase — the former is deploy-only + cloud-verified; the latter awaits its producer command.
-- **CodeRabbit review (on PR #5, once un-drafted) was addressed** — 2 Major (the revoke-on-demotion crash+retry gap, closed by persisting the pre-change role in the idempotency record + reordering the `set_role` CLI, with a crash-reclaim test) and 2 Minor fixed; ~8 Trivial nitpicks (helper de-duplication, test-fixture cleanup, full-scan scaling watch-items) acknowledged for a later pass, not blocking.
+- **CodeRabbit review (on PR #5) was addressed** — 2 Major (the revoke-on-demotion crash+retry gap, closed by persisting the pre-change role in the idempotency record + reordering the `set_role` CLI, with a crash-reclaim test) and 2 Minor fixed; ~8 Trivial nitpicks (helper de-duplication, test-fixture cleanup, full-scan scaling watch-items) acknowledged for a later pass, not blocking.
 
 ---
 
 ## 10. What's next
 
-Commit Slice C → PR #5 CI (the real emulator run for the projection flows) → **mark PR #5 ready-for-review** so CodeRabbit reviews the whole phase → address its comments → merge. That completes the async/projection backend. Then **Phase 4** (the Workbench UI over these read models) and, at deploy time, **`U12`** (provision the Cloud Tasks queues + Cloud Scheduler crons, flip readiness to `configured`).
+Phase 3 is **merged** (PR #5, `b68fc6f`): Slice C's projection flows ran green on the real emulator in CI, CodeRabbit reviewed the whole phase, and its comments were addressed — the async/projection backend is complete. Next is **Phase 4** (the Workbench UI over these read models) and, at deploy time, **`U12`** (provision the Cloud Tasks queues + Cloud Scheduler crons, flip readiness to `configured`).
 
 ---
 
