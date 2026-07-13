@@ -52,8 +52,10 @@ test("Flow 403 — a manager-only action is rejected by the server for an ops id
   await dialog.getByRole("textbox", { name: "Note" }).fill("E2E forbidden probe.");
   await dialog.getByRole("button", { name: "Add note" }).click();
 
-  // The app surfaces the typed FORBIDDEN toast from the server's real 403.
+  // The app surfaces the typed FORBIDDEN message from the server's real 403. The message
+  // renders in BOTH the still-open command dialog (error phase) and the toast, so scope to
+  // the first match — same pattern as stale-write.spec — to avoid a strict-mode violation.
   await expect(
-    page.getByText(/don't have permission to do this/i),
+    page.getByText(/don't have permission to do this/i).first(),
   ).toBeVisible({ timeout: 20_000 });
 });
