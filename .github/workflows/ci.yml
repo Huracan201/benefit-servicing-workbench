@@ -134,11 +134,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      # No committed package-lock.json yet (Phase 1 scaffold) → npm install, not npm ci.
-      # Re-enable `cache: npm` + `npm ci` once a lockfile is generated & committed.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Install
         working-directory: frontend
-        run: npm install
+        run: npm ci
       - name: Lint
         working-directory: frontend
         run: npm run lint
