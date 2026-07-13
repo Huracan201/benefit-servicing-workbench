@@ -44,14 +44,15 @@ trap cleanup EXIT
 
 echo "[e2e] waiting for the command API to accept connections…"
 for i in $(seq 1 60); do
-  # Any HTTP response (even a 404) proves Django's routes are loaded and it is accepting
-  # connections; "000" is curl's code for "no connection yet". curl already writes "000" on a
-  # refused connection AND exits non-zero — so use `|| true` (not `|| echo 000`, which would
-  # APPEND a second "000" → "000000" and falsely read as ready) and default an empty capture.
-  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/readiness" 2>/dev/null || true)"
+  # Poll the LIVENESS endpoint: /health is always 200 the moment Django serves (unlike
+  # /readiness, which 503s until Firestore is reachable — a false negative here). Break ONLY
+  # on 200, so a partly-started server returning 5xx does not launch the suite early. curl
+  # writes "000" on a refused connection AND exits non-zero, so `|| true` (not `|| echo 000`,
+  # which would APPEND a second "000") + an empty-capture default keep a failure exactly "000".
+  code="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000/health" 2>/dev/null || true)"
   code="${code:-000}"
-  if [ "${code}" != "000" ]; then
-    echo "[e2e] command API is up (HTTP ${code})."
+  if [ "${code}" = "200" ]; then
+    echo "[e2e] command API is up (HTTP 200)."
     break
   fi
   if ! kill -0 "${DJANGO_PID}" 2>/dev/null; then
