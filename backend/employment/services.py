@@ -299,10 +299,12 @@ def change_employment_status(
                 "idempotency key reused with a different request"
             )
 
-        # Optimistic concurrency (specs/08 §8.4): this endpoint targets the borrower, so the
-        # If-Match precondition is asserted against the borrower's revision. PROCEED path only
-        # (a replay returned above); no-op when the client sent no If-Match.
-        assert_expected_revision(borrower, ctx)
+        # Optimistic concurrency (specs/08 §8.4): asserted against the borrower's revision
+        # (this endpoint targets the borrower). PROCEED path only, and NOT on a crash-recovery
+        # reclaim — the original attempt already bumped the revision, so re-checking would
+        # spuriously 409 a legitimate retry. No-op when the client sent no If-Match.
+        if not outcome.reclaimed:
+            assert_expected_revision(borrower, ctx)
 
         # --- borrower employment transition + benefit cascade ----------------
         # Reclaim-aware: on a same-key reclaim of an abandoned lease where the

@@ -1,6 +1,6 @@
 # Spec — Demo-hardening pass ("get to 9")
 
-**Status:** 📋 Spec — the build follows this. Derived from the [full system review](#) (2026-07-13): production-readiness **5/10**, demo/portfolio strength **8/10**.
+**Status:** 📋 Spec — the build follows this. Derived from the full-system review (2026-07-13, a read-only multi-agent workflow): production-readiness **5/10**, demo/portfolio strength **8/10**.
 
 **Objective.** Close the specific findings that hold the demo/portfolio score at 8 (and dent production-readiness): the three "tells" a staff-level reviewer lands on in the first read — a *claimed-but-not-enforced* correctness guarantee, a *built-but-unwired* observability layer, and visible *frontend finish seams* — plus the front-door doc/contract inaccuracies. This is a correctness + observability + polish pass, distinct from Phase 6 (deploy IaC).
 
