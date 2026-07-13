@@ -1,6 +1,6 @@
 # Security review — Phase 3 (async layer) + Phase 4 (workbench UI)
 
-**Status:** ✅ Review complete — **no CRITICAL / HIGH / MEDIUM; all 6 deferred Phase-3 security prerequisites LANDED.** 8 LOW findings (production-hardening); the adversarial pass refuted 6 (incl. a claimed HIGH + two MEDIUMs). Fixes fold into **Phase 5** (`release/phase-5`). Companion to the [Phase 1+2 review](./security-review-phase-1-2.md).
+**Status:** ✅ Review complete — **no CRITICAL / HIGH / MEDIUM; all 6 deferred Phase-3 security prerequisites LANDED.** 8 LOW / 7 distinct (production-hardening); the adversarial pass refuted 6 (incl. a claimed HIGH + two MEDIUMs). Fixes fold into **Phase 5** (`release/phase-5`). Companion to the [Phase 1+2 review](./security-review-phase-1-2.md).
 
 ## 1. Scope & method
 
@@ -18,7 +18,7 @@ Adversarial review of the surface added since the Phase 1+2 review: **Phase 3** 
 | LOW | 8 (7 distinct after dedupe) |
 | Refuted by verification | 6 |
 
-The async layer and the command surface are sound: replay/double-charge is closed by deterministic ids + in-transaction status preconditions + the fencing re-drive; `/internal` is Google-OIDC-verified; the client cannot write any collection; reads require a servicing-role claim. The 8 confirmed findings are all **production-hardening / defense-in-depth** — none is exploitable for financial loss, data breach, or an authz bypass in the current design.
+The async layer and the command surface are sound: replay/double-charge is closed by deterministic ids + in-transaction status preconditions + the fencing re-drive; `/internal` is Google-OIDC-verified; the client cannot write any collection; reads require a servicing-role claim. The confirmed findings — **8 raw, 7 distinct** (the role-demotion read-lag was surfaced by two dimensions and is deduped to row #5 below) — are all **production-hardening / defense-in-depth**; none is exploitable for financial loss, data breach, or an authz bypass in the current design.
 
 ## 3. The deferred Phase-3 prerequisites — **all LANDED**
 
@@ -33,7 +33,7 @@ The Phase 1+2 review deferred six prerequisites to "land with the code that make
 | Manual-exception `entityId`/`entityType` validation | ✅ LANDED | `exceptions/views.py::_normalize_entity_type` — allowlist to `{LOAN, BORROWER, EMPLOYER}` |
 | Revoke refresh tokens on demotion | ✅ LANDED | `administration/services.py` — `revoke_refresh_tokens(uid)` when `role_rank(new) < role_rank(prev)` |
 
-## 4. Findings (8 LOW)
+## 4. Findings — 7 distinct (8 raw LOW; #5 was surfaced by two dimensions)
 
 | # | Finding | File | Disposition |
 |---|---------|------|-------------|
