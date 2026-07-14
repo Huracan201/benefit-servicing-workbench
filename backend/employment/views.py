@@ -58,6 +58,19 @@ class EmploymentStatusView(APIView):
             )
             return Response(err.to_body(correlation_id), status=err.http_status)
 
+        # Optional If-Match → expected_revision (optimistic concurrency, specs/08 §8.4). This
+        # endpoint targets the borrower, so the value is the borrower's revision.
+        if_match = request.headers.get("If-Match", "").strip()
+        expected_revision = None
+        if if_match:
+            try:
+                expected_revision = int(if_match.strip('"'))
+            except ValueError:
+                err = ValidationError(
+                    "If-Match must be an integer revision", code="INVALID_IF_MATCH"
+                )
+                return Response(err.to_body(correlation_id), status=err.http_status)
+
         body = request.data if isinstance(request.data, dict) else {}
         user = request.user
         ctx = CommandContext.build(
@@ -69,6 +82,7 @@ class EmploymentStatusView(APIView):
             body=body,
             idempotency_key=idempotency_key,
             correlation_id=correlation_id,
+            expected_revision=expected_revision,
         )
 
         try:

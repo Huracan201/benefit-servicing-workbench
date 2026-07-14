@@ -1,42 +1,25 @@
 "use client";
 
-// TopBar — the 56px header row of the app shell (specs/15 §15.1, U1 wireframe chrome).
-// Left: a global search input. Right: a DEV/DEMO "View as" role switcher, the U3
-// ThemeToggle, and the real session identity (signed-in email + custom-claim role +
-// sign-out, or a Sign-in link when logged out — from useSession()). The search is a
-// non-functional affordance for now (global search lands in a later slice).
-//
-// The "View as" switcher is explicitly a CLIENT-SIDE demo affordance: it sets which
-// role the UI *pretends* to be so RoleGate can show/lighten affordances. It is NOT a
-// security boundary — Django authorizes every write and Firestore rules authorize
-// reads (specs/12). The selection is persisted to localStorage so a later slice can
-// expose it to RoleGate consumers via a shared hook/context (see contractNotes).
+// TopBar — the 56px header row of the app shell (specs/15 §15.1). It carries the theme
+// toggle and the REAL session identity (signed-in email + custom-claim role + sign-out, or a
+// Sign-in link when signed out — from useSession()). Role gating on each screen is driven by
+// the real claim role; the demo shows different roles by signing in as the seeded
+// ops@ / mgr@ / admin@ personas (backend/seed/users.py).
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { User } from "firebase/auth";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useSession } from "@/lib/session";
-import { ROLES, type Role } from "@/lib/types";
+import type { Role } from "@/lib/types";
 
-/** localStorage key the demo "View as" role is persisted under. A later slice should
- *  add a shared `useViewAsRole()` hook/context that reads this and feeds RoleGate. */
-export const VIEW_AS_ROLE_STORAGE_KEY = "bsw-view-as-role";
+const ROLE_LABELS: Record<Role, string> = {
+  OPERATIONS_USER: "Operations User",
+  SERVICING_MANAGER: "Servicing Manager",
+  ADMINISTRATOR: "Administrator",
+};
 
-/** Default viewer role before any explicit selection (matches the seed demo persona). */
-export const DEFAULT_VIEW_AS_ROLE: Role = "SERVICING_MANAGER";
-
-// Short segment labels for the density-first segmented control.
-const ROLE_SEGMENTS: ReadonlyArray<{ role: Role; short: string; full: string }> = [
-  { role: "OPERATIONS_USER", short: "Ops", full: "Operations User" },
-  { role: "SERVICING_MANAGER", short: "Manager", full: "Servicing Manager" },
-  { role: "ADMINISTRATOR", short: "Admin", full: "Administrator" },
-];
-
-/** Full label for a role, via the segment table; falls back to the raw enum value. */
 function roleFullLabel(role: Role | null): string | null {
-  if (!role) return null;
-  return ROLE_SEGMENTS.find((s) => s.role === role)?.full ?? role;
+  return role ? ROLE_LABELS[role] ?? role : null;
 }
 
 /** Two-letter avatar initials from the signed-in user's display name (preferred) or email. */
@@ -50,47 +33,12 @@ function initialsFor(user: User | null): string {
   return initials || source.slice(0, 2).toUpperCase();
 }
 
-function isRole(value: string | null): value is Role {
-  return value != null && (ROLES as readonly string[]).includes(value);
-}
-
-function storedRole(): Role | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const v = window.localStorage.getItem(VIEW_AS_ROLE_STORAGE_KEY);
-    return isRole(v) ? v : null;
-  } catch {
-    // Storage blocked (private mode): fall back to the default role (matches the write
-    // path, which already tolerates storage failures).
-    return null;
-  }
-}
-
 export function TopBar() {
-  // Start with the default so SSR and the first client render agree (no hydration
-  // mismatch); resolve the persisted choice in an effect after mount, mirroring
-  // ThemeToggle's pattern.
-  const [viewAsRole, setViewAsRole] = useState<Role>(DEFAULT_VIEW_AS_ROLE);
-
-  // The REAL session (Firebase custom-claim role) — distinct from the "View as" preview
-  // above. Screens authorize command affordances off this role, not the preview.
+  // The REAL session (Firebase custom-claim role) — screens authorize command affordances
+  // off this role, and the server authorizes every write regardless.
   const { user, role: claimsRole, status, signOut } = useSession();
   const roleLabel = roleFullLabel(claimsRole);
   const initials = initialsFor(user);
-
-  useEffect(() => {
-    const initial = storedRole();
-    if (initial) setViewAsRole(initial);
-  }, []);
-
-  function selectRole(role: Role) {
-    setViewAsRole(role);
-    try {
-      window.localStorage.setItem(VIEW_AS_ROLE_STORAGE_KEY, role);
-    } catch {
-      // ignore storage failures (private mode) — the in-memory state still applies.
-    }
-  }
 
   return (
     <header className="col-start-1 row-start-1 flex items-center gap-3 border-b border-border bg-surface px-4 md:col-start-2">
@@ -103,77 +51,11 @@ export function TopBar() {
         B
       </span>
 
-      {/* Global search (affordance only for now). */}
-      <div className="relative min-w-0 flex-1 md:max-w-[420px]">
-        <svg
-          aria-hidden="true"
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3"
-        >
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        <input
-          type="search"
-          aria-label="Search borrower, loan reference, or employer"
-          placeholder="Search borrower, loan reference, or employer…"
-          className="h-8 w-full rounded-sm border border-border bg-surface-2 pl-8 pr-2.5 text-sm text-ink placeholder:text-ink-3 focus-visible:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        />
-      </div>
-
       <div className="flex-1" aria-hidden="true" />
-
-      {/* "View as" demo role switcher (client-side affordance, NOT authorization). */}
-      <div className="hidden items-center gap-2 sm:flex">
-        <span
-          id="view-as-label"
-          className="text-xs uppercase tracking-wider text-ink-3"
-        >
-          View as
-        </span>
-        <div
-          role="radiogroup"
-          aria-labelledby="view-as-label"
-          className="flex overflow-hidden rounded-sm border border-border"
-        >
-          {ROLE_SEGMENTS.map(({ role, short, full }, i) => {
-            const active = viewAsRole === role;
-            return (
-              <button
-                key={role}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                aria-label={`View as ${full}`}
-                title={`View as ${full} (demo — server still authorizes)`}
-                onClick={() => selectRole(role)}
-                className={[
-                  "px-2.5 py-1 text-sm font-medium transition-colors motion-reduce:transition-none",
-                  i > 0 ? "border-l border-border" : "",
-                  active
-                    ? "bg-accent/[0.12] text-accent"
-                    : "bg-surface text-ink-2 hover:bg-surface-2 hover:text-ink",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {short}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <ThemeToggle />
 
-      {/* Real session identity — the signed-in email + custom-claim role + sign-out.
-          Distinct from the "View as" preview above (which is affordance-only). */}
+      {/* Real session identity — the signed-in email + custom-claim role + sign-out. */}
       {status === "authed" && user ? (
         <div className="flex items-center gap-2.5">
           <div className="hidden min-w-0 text-right sm:block">

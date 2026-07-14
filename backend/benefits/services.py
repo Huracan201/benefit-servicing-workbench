@@ -51,6 +51,7 @@ from commands.base import (
     NotFound,
     OperationInProgress,
     Unprocessable,
+    assert_expected_revision,
     from_domain_error,
     transactional,
 )
@@ -287,6 +288,13 @@ def activate_benefit(
                 "idempotency key reused with a different request"
             )
 
+        # Optimistic concurrency (specs/08 §8.4): PROCEED path only, and NOT on a crash-
+        # recovery reclaim — the original attempt already bumped the revision, so re-checking
+        # the client's original If-Match against the bumped value would spuriously 409 a
+        # legitimate retry; the reclaim-aware branches below re-drive it. No-op when no If-Match.
+        if not outcome.reclaimed:
+            assert_expected_revision(agreement, ctx)
+
         # Reclaim-aware: on a same-key reclaim of an abandoned lease where the
         # agreement has ALREADY left PENDING (it is ACTIVATING, or ACTIVE if
         # generation finished), the original call's core txn committed the
@@ -521,6 +529,13 @@ def suspend_benefit(
                 "idempotency key reused with a different request"
             )
 
+        # Optimistic concurrency (specs/08 §8.4): PROCEED path only, and NOT on a crash-
+        # recovery reclaim — the original attempt already bumped the revision, so re-checking
+        # the client's original If-Match against the bumped value would spuriously 409 a
+        # legitimate retry; the reclaim-aware branches below re-drive it. No-op when no If-Match.
+        if not outcome.reclaimed:
+            assert_expected_revision(agreement, ctx)
+
         # --- transition ACTIVE -> SUSPENDED (a raise aborts the txn, discarding
         #     the PENDING idempotency write) -----------------------------------
         previous_status = agreement.get("status")
@@ -655,6 +670,13 @@ def resume_benefit(
             raise IdempotencyKeyReused(
                 "idempotency key reused with a different request"
             )
+
+        # Optimistic concurrency (specs/08 §8.4): PROCEED path only, and NOT on a crash-
+        # recovery reclaim — the original attempt already bumped the revision, so re-checking
+        # the client's original If-Match against the bumped value would spuriously 409 a
+        # legitimate retry; the reclaim-aware branches below re-drive it. No-op when no If-Match.
+        if not outcome.reclaimed:
+            assert_expected_revision(agreement, ctx)
 
         # --- transition SUSPENDED -> ACTIVE (SUSPENDED source only) ----------
         # `suspended_from` is read before the reclaim guard so the post-commit
@@ -874,6 +896,13 @@ def terminate_benefit(
             raise IdempotencyKeyReused(
                 "idempotency key reused with a different request"
             )
+
+        # Optimistic concurrency (specs/08 §8.4): PROCEED path only, and NOT on a crash-
+        # recovery reclaim — the original attempt already bumped the revision, so re-checking
+        # the client's original If-Match against the bumped value would spuriously 409 a
+        # legitimate retry; the reclaim-aware branches below re-drive it. No-op when no If-Match.
+        if not outcome.reclaimed:
+            assert_expected_revision(agreement, ctx)
 
         # --- transition {ACTIVE,SUSPENDED,ACTIVATING} -> TERMINATED ----------
         # All three source edges are legal (specs/06 §6.3); assert_transition

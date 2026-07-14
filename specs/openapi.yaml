@@ -36,23 +36,6 @@ tags:
   - name: system
 
 paths:
-  /benefit-agreements/{agreementId}:
-    get:
-      tags: [benefit-agreements]
-      summary: Get a benefit agreement (server-composed detail)
-      operationId: getBenefitAgreement
-      parameters:
-        - $ref: '#/components/parameters/AgreementId'
-      responses:
-        '200':
-          description: The benefit agreement.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/BenefitAgreement' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
   /benefit-agreements/{agreementId}/activate:
     post:
       tags: [benefit-agreements]
@@ -642,9 +625,6 @@ components:
     EmploymentStatus:
       type: string
       enum: [PENDING, ACTIVE, LEAVE, TERMINATED]
-    LoanStatus:
-      type: string
-      enum: [ACTIVE, PAID_OFF, DELINQUENT, CLOSED]
     ExceptionStatus:
       type: string
       enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]
@@ -820,19 +800,6 @@ components:
         firstSeenAt: { type: string, format: date-time }
         lastSeenAt: { type: string, format: date-time }
         resolvedAt: { type: [string, 'null'], format: date-time }
-    Loan:
-      type: object
-      properties:
-        id: { type: string }
-        borrowerId: { type: string }
-        employerId: { type: string }
-        currency: { type: string, const: USD }
-        currentBalanceCents: { $ref: '#/components/schemas/Cents' }
-        loanStatus: { $ref: '#/components/schemas/LoanStatus' }
-        benefitAgreementId: { type: [string, 'null'] }
-        benefitStatus:
-          oneOf: [{ $ref: '#/components/schemas/BenefitStatus' }, { type: 'null' }]
-        revision: { type: integer }
     Note:
       type: object
       properties:

@@ -1,8 +1,12 @@
 """Financial invariants I1-I7 (specs/07 §7.2).
 
-Pure functions over primitives (ints / strings), asserted inside the command
-transaction before commit. A violation raises InvariantViolation, which the
-command layer maps to 409 INVARIANT_VIOLATION.
+Pure functions over primitives (ints / strings). **I1-I4 are asserted inside the command
+transaction before commit** — a violation raises InvariantViolation, which the command layer
+maps to 409 INVARIANT_VIOLATION. **I5-I7 are defined here but are not currently wired into a
+transaction call site:** I5 (schedule sums to the commitment) is instead guaranteed
+structurally by the residual solver at schedule generation (specs/07 §7.3), and I6 (POSTED
+immutability) + I7 (mutual-pointer integrity) are retained as defensive checks for future
+callers / tests.
 
 Pure stdlib + common.errors — no django, no google.cloud, no float.
 """

@@ -18,12 +18,16 @@ idempotency key). An in-progress same-key replay likewise yields ``202``.
 
 from __future__ import annotations
 
+import logging
+import time
+
 from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commands.base import CommandContext, CommandError, OperationInProgress, ValidationError
+from core.logging_utils import log_event
 from firebase_auth.permissions import RequireManager
 
 from .services import (
@@ -32,6 +36,11 @@ from .services import (
     suspend_benefit,
     terminate_benefit,
 )
+
+# The shared command logger — the completion line every command emits via `_respond` below
+# turns the specs/16 §16.2 structured-logging substrate live on the command surface
+# (payments/benefits/notes/admin route through this helper).
+_logger = logging.getLogger("bsw.command")
 
 
 def _actor_name(user) -> str:
@@ -55,6 +64,19 @@ def _build_ctx(request: Request, correlation_id):
         )
         return None, Response(err.to_body(correlation_id), status=err.http_status)
 
+    # Optional If-Match → expected_revision (optimistic concurrency, specs/08 §8.4). Absent =
+    # no precondition; a non-integer value is a client error (400) rather than a silent skip.
+    if_match = request.headers.get("If-Match", "").strip()
+    expected_revision = None
+    if if_match:
+        try:
+            expected_revision = int(if_match.strip('"'))
+        except ValueError:
+            err = ValidationError(
+                "If-Match must be an integer revision", code="INVALID_IF_MATCH"
+            )
+            return None, Response(err.to_body(correlation_id), status=err.http_status)
+
     user = request.user
     ctx = CommandContext.build(
         actor_id=getattr(user, "uid", ""),
@@ -65,6 +87,7 @@ def _build_ctx(request: Request, correlation_id):
         body=request.data if isinstance(request.data, dict) else None,
         idempotency_key=idempotency_key,
         correlation_id=correlation_id,
+        expected_revision=expected_revision,
     )
     return ctx, None
 
@@ -78,14 +101,36 @@ def _respond(command, agreement_id: str, ctx) -> Response:
     other :class:`CommandError` is the typed specs/11 §11.3 envelope at its HTTP
     status.
     """
+    started = time.monotonic()
+    operation = getattr(command, "__name__", "command")
+
+    def _log(result: str, *, level: int = logging.INFO, error_code=None) -> None:
+        # One structured completion line per command (specs/16 §16.2) — turns the built-but-
+        # unwired logging substrate live on the command surface, incl. the two-phase payment.
+        log_event(
+            _logger,
+            level,
+            "command completed",
+            operation=operation,
+            entityId=agreement_id,
+            result=result,
+            durationMs=round((time.monotonic() - started) * 1000),
+            correlationId=ctx.correlation_id,
+            idempotencyKey=ctx.idempotency_key,
+            errorCode=error_code,
+        )
+
     try:
         result = command(agreement_id=agreement_id, ctx=ctx)
     except OperationInProgress as exc:
+        _log("IN_PROGRESS")
         response = Response(exc.to_body(ctx.correlation_id), status=exc.http_status)
         response["Retry-After"] = str(exc.retry_after)
         return response
     except CommandError as exc:
+        _log("ERROR", level=logging.WARNING, error_code=exc.code)
         return Response(exc.to_body(ctx.correlation_id), status=exc.http_status)
+    _log("OK")
     return Response(result, status=status.HTTP_200_OK)
 
 
