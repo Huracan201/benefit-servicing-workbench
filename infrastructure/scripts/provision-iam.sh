@@ -29,6 +29,10 @@ bind_project_role() { # <member-email> <role>
 ensure_sa "bsw-api" "BSW Cloud Run runtime"
 ensure_sa "bsw-invoker" "BSW Cloud Tasks/Scheduler invoker"
 
+# A freshly-created service account is not instantly usable as an IAM policy member — a bind
+# immediately after create can fail "does not exist". Give IAM a few seconds to propagate.
+sleep 10
+
 log "binding runtime roles on ${RUNTIME_SA}…"
 for role in \
   roles/datastore.user \
@@ -50,5 +54,16 @@ gcloud iam service-accounts add-iam-policy-binding "${INVOKER_SA}" \
 # tighten to the service (gcloud run services add-iam-policy-binding) after deploy for least priv.
 log "granting run.invoker to ${INVOKER_SA}…"
 bind_project_role "${INVOKER_SA}" "roles/run.invoker"
+
+# The runtime SA reads DJANGO_SECRET_KEY from Secret Manager (deploy-api.sh --set-secrets), which
+# needs secretAccessor ON that secret. Grant it when the secret exists (create it first — see the
+# runbook / provision-all.sh); otherwise warn so it is not silently missed.
+if gcloud secrets describe "${DJANGO_SECRET_KEY_SECRET}" --project "${PROJECT_ID}" >/dev/null 2>&1; then
+  log "granting secretAccessor on ${DJANGO_SECRET_KEY_SECRET} to ${RUNTIME_SA}…"
+  gcloud secrets add-iam-policy-binding "${DJANGO_SECRET_KEY_SECRET}" --project "${PROJECT_ID}" \
+    --member "serviceAccount:${RUNTIME_SA}" --role roles/secretmanager.secretAccessor >/dev/null
+else
+  warn "secret '${DJANGO_SECRET_KEY_SECRET}' not found — create it, then re-run provision-iam.sh (idempotent) so the runtime SA can read it."
+fi
 
 log "IAM provisioned."
