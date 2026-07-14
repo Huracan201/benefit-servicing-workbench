@@ -13,5 +13,6 @@ Per-phase engineering reports for the BenefitServicing Workbench — what was bu
 | 4 — Workbench UI (part 2: command surface, worklists & e2e) | [phase-4-part-2-command-surface-and-worklists.md](./phase-4-part-2-command-surface-and-worklists.md) | ✅ Merged to `main` (`f70a9a0`, PR #7) — CI 6/6 green + CodeRabbit addressed |
 | 5 — Testing & hardening | [phase-5-testing-and-hardening.md](./phase-5-testing-and-hardening.md) | ✅ Merged to `main` (PR #8) |
 | Security review — Phase 3 + 4 | [security-review-phase-3-4.md](./security-review-phase-3-4.md) | ✅ Reviewed (no CRITICAL/HIGH/MED; all Phase-3 prereqs landed); 8 LOW → Phase 5 |
+| 6 — Deployment & docs | [phase-6-deployment.md](./phase-6-deployment.md) | ✅ Merged to `main` (`2c3c3cc`, PR #11) — CI 7/7 green (incl. real Docker build) + CodeRabbit addressed |
 
 These are point-in-time records; the authoritative design is always `specs/`.

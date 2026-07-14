@@ -1,33 +1,67 @@
+"use client";
+
 // AppShell — the persistent desktop-first operations chrome (specs/15 §15.1, U1
-// wireframe). A CSS grid lays out four regions: a fixed 216px sidebar column and a
-// fluid main column, split by a 56px header row —
+// wireframe) PLUS the client-side auth gate. A signed-out user must never see the
+// workbench: its reads are denied by the Firestore rules, which would render a wall of
+// permission-denied errors (and leaking the screen layout pre-auth is poor UX anyway).
+// So the chrome + page only mount once the session is `authed`; otherwise the user is
+// sent to /signin. The sign-in screen itself renders bare (no chrome), centered.
 //
-//     ┌───────────┬────────────────────────┐  56px   brand │ top bar
-//     │  brand    │        top bar         │
-//     ├───────────┼────────────────────────┤  1fr    nav   │ main (scrolls)
-//     │  nav      │        main            │
-//     └───────────┴────────────────────────┘
-//            216px          fluid
-//
-// The chrome (brand / nav / top bar) is fixed; only <main> scrolls. Below `md` the
-// sidebar collapses and the top bar spans full width (with a compact brand mark).
-// AppShell itself is presentational and stays a server component — the interactive
-// pieces (TopBar's search + "View as" switcher, Nav's active-route state) are their
-// own client components.
+// Layout (authed): a CSS grid — a fixed 216px sidebar column and a fluid main column,
+// split by a 56px header row; only <main> scrolls. Below `md` the sidebar collapses and
+// the top bar spans full width (with a compact brand mark).
 
 import type { ReactNode } from "react";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Nav from "@/components/Nav";
 import SessionBanner from "@/components/SessionBanner";
 import TopBar from "@/components/TopBar";
+import { useSession } from "@/lib/session";
+
+const SIGN_IN_ROUTE = "/signin";
 
 export interface AppShellProps {
   children: ReactNode;
 }
 
 export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { status } = useSession();
+  const onSignIn = pathname === SIGN_IN_ROUTE;
+
+  // Redirects run in an effect, never during render. A signed-out user on a protected
+  // route -> /signin; an already-signed-in user on /signin -> the dashboard. An
+  // `expired` session is intentionally left in place so its SessionBanner can offer to
+  // re-authenticate without losing the operator's context.
+  useEffect(() => {
+    if (!onSignIn && status === "anonymous") {
+      router.replace(SIGN_IN_ROUTE);
+    } else if (onSignIn && status === "authed") {
+      router.replace("/");
+    }
+  }, [onSignIn, status, router]);
+
+  // The sign-in screen renders bare (no operations chrome), centered.
+  if (onSignIn) {
+    if (status === "authed") return <ShellFallback />; // redirecting away; avoid a flash
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg px-6">
+        {children}
+      </div>
+    );
+  }
+
+  // Protected route: don't mount the workbench (and its rule-denied reads) until the
+  // session is known signed-in. `loading` (initial resolve) and `anonymous` (mid-redirect)
+  // show a quiet placeholder instead of the dashboard-with-errors.
+  if (status !== "authed" && status !== "expired") {
+    return <ShellFallback />;
+  }
+
+  // authed | expired -> the full chrome (expired additionally surfaces the SessionBanner).
   return (
-    // Flex column so the (normally-empty) SessionBanner can push the chrome down when a
-    // session expires; the grid fills the remaining height and only <main> scrolls.
     <div className="flex h-screen flex-col overflow-hidden bg-bg text-ink">
       {/* Session-expired banner — renders nothing unless the session has expired. */}
       <SessionBanner />
@@ -51,7 +85,7 @@ export function AppShell({ children }: AppShellProps) {
           </span>
         </div>
 
-        {/* Header row — global search, "View as" switcher, theme toggle, avatar. */}
+        {/* Header row — theme toggle, session identity, sign out. */}
         <TopBar />
 
         {/* Left navigation — the "Servicing" group. */}
@@ -62,6 +96,23 @@ export function AppShell({ children }: AppShellProps) {
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+// Quiet full-screen placeholder shown while auth resolves or a redirect is in flight —
+// deliberately minimal (the brand mark, pulsing) so it never flashes the dashboard or
+// its rule-denied read errors.
+function ShellFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-bg">
+      <span
+        aria-hidden="true"
+        className="grid h-8 w-8 animate-pulse place-items-center rounded-[9px] bg-accent text-base font-bold text-accent-ink"
+      >
+        B
+      </span>
+      <span className="sr-only">Loading…</span>
     </div>
   );
 }

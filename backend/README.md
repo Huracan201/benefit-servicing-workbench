@@ -44,8 +44,9 @@ dev; every variable and its `local` / `ci` / `demo` values are in
 
 ## Local development
 
-Preferred: run the whole stack (emulator + backend + frontend) from the repo
-root with `docker compose up`.
+One command from the repo root brings up the whole stack **with seeded demo
+data** — `make demo` (Phase 6; the same emulator + `seed_demo` + Django + Next.js
+harness the CI e2e job runs).
 
 Manual (needs the Firebase emulator running — see
 [firebase/emulator/README.md](../firebase/emulator/README.md)):

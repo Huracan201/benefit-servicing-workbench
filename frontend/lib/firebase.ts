@@ -23,6 +23,13 @@ const firebaseConfig = {
 
 const useEmulator = process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === "true";
 
+/**
+ * True when the client is wired to the local Firebase emulators (dev/CI) rather than a live
+ * deployment — driven by NEXT_PUBLIC_USE_FIREBASE_EMULATOR (specs/21 §21.3). Exposed so the UI
+ * can label the environment accurately (emulator "not production auth" vs a live demo deploy).
+ */
+export const usingEmulator = useEmulator;
+
 let cachedApp: FirebaseApp | null = null;
 let cachedAuth: Auth | null = null;
 let cachedDb: Firestore | null = null;

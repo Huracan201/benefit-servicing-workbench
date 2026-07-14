@@ -68,9 +68,9 @@ cat <<'BANNER'
   ┌──────────────────────────────────────────────────────────────────┐
   │  BenefitServicing Workbench — local demo is UP                     │
   │                                                                    │
-  │    Workbench UI   ->  http://localhost:3000                        │
+  │    Workbench UI   ->  http://localhost:3000   <- start here        │
   │    Command API    ->  http://localhost:8000/api/v1                 │
-  │    Emulator UI    ->  http://localhost:4000                        │
+  │    Emulators      ->  Firestore :8080 · Auth :9099 (seeded)        │
   │                                                                    │
   │  Sign in with a seeded demo user (creds in docs/demo-script.md).   │
   │  Ctrl-C tears the whole stack down.                                │

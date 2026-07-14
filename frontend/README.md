@@ -2,8 +2,9 @@
 
 The operator-facing **Workbench**: a Next.js (App Router) + TypeScript + Tailwind
 app over the merged Django command backend. Phase 4 — part 1 (design system +
-read screens, PR #6, merged) and part 2 (the command surface + worklists + e2e,
-PR #7).
+read screens, PR #6) and part 2 (the command surface + worklists + e2e, PR #7),
+**both merged**. The whole stack (this app + the emulator + a seeded Django API)
+comes up with one command — `make demo` from the repo root (Phase 6).
 
 See [specs/02](../specs/02-architecture.md) (architecture / CQRS),
 [specs/05](../specs/05-read-models-and-projections.md) (read models),
@@ -55,9 +56,9 @@ npm run test           # Vitest + Testing Library (unit/component; e2e excluded)
 npm run build          # next build (real tsc + next/font fetch)
 npm run typecheck      # tsc --noEmit
 
-# End-to-end (needs the emulator + a seeded Django API). CI runs it via
-# infrastructure/scripts/e2e.sh inside `firebase emulators:exec`; locally, with the
-# emulator + Django up:
+# End-to-end (needs the emulator + a seeded Django API, and the Playwright browser —
+# `npx playwright install chromium` once). CI runs it via infrastructure/scripts/e2e.sh
+# inside `firebase emulators:exec`; locally, with the emulator + Django up:
 npm run test:e2e
 ```
 
