@@ -10,6 +10,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
+import { usingEmulator } from "@/lib/firebase";
 import { signInWithEmulator } from "@/lib/session";
 
 // Mirrors backend/seed/users.py (DEMO_USERS + DEFAULT_PASSWORD) — the seeded emulator
@@ -143,10 +144,12 @@ export default function SignInPage() {
           </ul>
         </div>
 
-        {/* Emulator-only label. */}
+        {/* Environment label — accurate whether wired to the emulator (dev/CI) or a live demo. */}
         <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-3">
           <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-info" />
-          Local Auth emulator · not production authentication.
+          {usingEmulator
+            ? "Local Auth emulator · not production authentication."
+            : "Demo environment · synthetic data, resets daily."}
         </p>
       </Card>
     </div>
