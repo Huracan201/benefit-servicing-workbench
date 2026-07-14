@@ -76,19 +76,52 @@ def _check_firestore() -> dict[str, Any]:
     return result
 
 
+def _cloud_tasks_status() -> dict[str, Any]:
+    """Report the Cloud Tasks *configuration* status — a config reflection, not a live ping.
+
+    Enqueuing a probe task would have real side effects, so readiness reports whether the
+    async dispatch seam (``internal.enqueue``) is wired for cloud dispatch, not a round-trip:
+
+    - ``inline`` mode (emulator / local / CI): ``not_configured`` — the async surface runs
+      in-process (specs/14), so Cloud Tasks is intentionally absent. Correct, not a fault.
+    - ``cloud`` mode with the OIDC env present (``TASKS_AUDIENCE`` + ``TASKS_INVOKER_SA`` —
+      exactly what the ``/internal`` handlers validate against): ``configured``.
+    - ``cloud`` mode but that env missing: ``unavailable`` — a real misconfiguration worth
+      surfacing (enqueued tasks would be rejected at the OIDC boundary).
+
+    Non-gating in every case (specs/16 §16.5): task dispatch is async and never blocks the
+    request path, so this is reported but never flips readiness to 503.
+    """
+    from django.conf import settings
+
+    mode = getattr(settings, "TASK_EXECUTION_MODE", "cloud")
+    if mode != "cloud":
+        return {"status": "not_configured"}
+    audience = getattr(settings, "TASKS_AUDIENCE", "") or ""
+    invoker = getattr(settings, "TASKS_INVOKER_SA", "") or ""
+    if audience and invoker:
+        return {"status": "configured"}
+    return {
+        "status": "unavailable",
+        "error": "TASK_EXECUTION_MODE=cloud but TASKS_AUDIENCE/TASKS_INVOKER_SA are unset",
+    }
+
+
 @api_view(["GET"])
 @authentication_classes([])
 @permission_classes([AllowAny])
 def readiness(_request: Request) -> Response:
     """Readiness probe: report dependency reachability.
 
-    Returns ``200`` when every hard dependency (Firestore) is reachable, else
-    ``503``. Cloud Tasks is wired in Phase 3 (specs/14); it is surfaced as
-    ``not_configured`` and does not gate readiness in the foundation phase.
+    Returns ``200`` when every hard dependency (Firestore) is reachable, else ``503``.
+    Cloud Tasks is reported as a **configuration** status (``not_configured`` inline,
+    ``configured`` when cloud dispatch is wired, ``unavailable`` if cloud mode is on but
+    misconfigured — see :func:`_cloud_tasks_status`) and, per specs/16 §16.5, never gates
+    readiness: async dispatch does not block the request path.
     """
     dependencies: dict[str, Any] = {
         "firestore": _check_firestore(),
-        "cloudTasks": {"status": "not_configured"},  # Phase 3 — specs/14
+        "cloudTasks": _cloud_tasks_status(),
     }
 
     hard_deps = ("firestore",)

@@ -1,0 +1,15 @@
+# Keep the Cloud Run build context (backend/) lean and reproducible.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+# Never ship local env / credentials into the image (Cloud Run uses ADC; dev uses the emulator).
+.env
+.env.*
+*.log
