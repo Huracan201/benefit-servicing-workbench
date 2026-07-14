@@ -8,7 +8,7 @@ PROJECT         := demo-benefitservicing-workbench
 FIREBASE_CONFIG := firebase/firebase.json
 
 .DEFAULT_GOAL := help
-.PHONY: help demo test-core test-frontend
+.PHONY: help demo screenshots test-core test-frontend
 
 help: ## List the available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -17,6 +17,10 @@ help: ## List the available targets
 demo: ## Bring up the FULL stack locally (emulator + API + workbench + seed); Ctrl-C to stop
 	firebase emulators:exec --project=$(PROJECT) --config $(FIREBASE_CONFIG) \
 		"bash infrastructure/scripts/demo-up.sh"
+
+screenshots: ## Capture README/demo screenshots to docs/img (brings the full stack up, then tears down)
+	firebase emulators:exec --project=$(PROJECT) --config $(FIREBASE_CONFIG) \
+		"bash infrastructure/scripts/screenshots.sh"
 
 test-core: ## Run the framework-free safety-critical core tests (offline, no deps needed)
 	cd backend && python -m unittest discover -s common/tests -p 'test_*.py' -t .
