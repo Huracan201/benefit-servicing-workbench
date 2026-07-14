@@ -24,30 +24,34 @@ const SHOTS = [
 async function main() {
   await mkdir(OUT, { recursive: true });
   const browser = await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
-  });
-  const page = await context.newPage();
+  // finally: a throw in sign-in / navigation / capture must still close Chromium — otherwise
+  // main().catch's process.exit(1) would leave the browser process orphaned on CI/dev.
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      deviceScaleFactor: 2,
+    });
+    const page = await context.newPage();
 
-  await page.goto(`${BASE}/signin`);
-  await page.locator('input[name="email"]').fill(EMAIL);
-  await page.locator('input[name="password"]').fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.getByRole("heading", { name: "Portfolio dashboard" }).waitFor({ timeout: 30_000 });
+    await page.goto(`${BASE}/signin`);
+    await page.locator('input[name="email"]').fill(EMAIL);
+    await page.locator('input[name="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("heading", { name: "Portfolio dashboard" }).waitFor({ timeout: 30_000 });
 
-  for (const [name, path, heading] of SHOTS) {
-    await page.goto(`${BASE}${path}`);
-    if (heading) {
-      await page.getByRole("heading", heading).first().waitFor({ timeout: 30_000 });
+    for (const [name, path, heading] of SHOTS) {
+      await page.goto(`${BASE}${path}`);
+      if (heading) {
+        await page.getByRole("heading", heading).first().waitFor({ timeout: 30_000 });
+      }
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await page.waitForTimeout(1200); // let inline-SVG charts + subscriptions settle
+      await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+      console.log(`[screenshots] captured ${name}.png`);
     }
-    await page.waitForLoadState("networkidle").catch(() => {});
-    await page.waitForTimeout(1200); // let inline-SVG charts + subscriptions settle
-    await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
-    console.log(`[screenshots] captured ${name}.png`);
+  } finally {
+    await browser.close();
   }
-
-  await browser.close();
 }
 
 main().catch((err) => {
