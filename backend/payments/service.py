@@ -446,10 +446,14 @@ def finalize_success(
     # SCHEDULED -> CANCELED terminal transition with its own PAYMENT_CANCELED
     # event. Only reachable via loan payoff (a still-SCHEDULED installment implies
     # remaining commitment > 0, so benefit_completed came from loan_paid_off),
-    # hence reason "LOAN_PAID_OFF". This inline cancellation is bounded by the
-    # term length (well under Firestore's 500-write/txn cap), so it is the SOLE
-    # mechanism — there is no size threshold that hands off to the async
-    # cancel-future-contributions task.
+    # hence reason "LOAN_PAID_OFF". This inline cancellation is the SOLE mechanism
+    # (no size threshold hands off to the async cancel-future-contributions task),
+    # and that is safe because the schedule length is CAPPED at activation:
+    # termMonths <= common.money.MAX_TERM_MONTHS (=120). Each cancel is ~3 writes
+    # (1 update + 2 event writes — global + mirror), so even the maximum schedule
+    # is 3*120 + this finalize's overhead, comfortably under Firestore's
+    # 500-write/txn cap. A longer term is rejected as a 422 before any money moves,
+    # so this loop can never overflow the transaction.
     for inst in to_cancel:
         if inst["id"] == contribution_id:
             continue  # never cancel the installment we just POSTED

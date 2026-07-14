@@ -692,7 +692,7 @@ components:
           type: string
           enum: [ACCEPTED, IN_PROGRESS, COMPLETED, FAILED]
           example: IN_PROGRESS
-        retryAfter: { type: integer, description: Seconds hint; the Retry-After header is authoritative. }
+        retryAfter: { type: integer, minimum: 0, description: Seconds hint; the Retry-After header is authoritative. }
         correlationId: { type: string }
         state:
           type: object
@@ -708,6 +708,7 @@ components:
           type: object
           additionalProperties:
             type: object
+            required: [status]
             properties:
               status: { type: string, enum: [ok, unavailable, not_configured] }
               error: { type: string }

@@ -48,7 +48,7 @@ This phase marks a shift: the sandbox has a working toolchain (npm + network + J
 | The 12 new hardening unit tests (correlation-id sanitization, the wired header stack, the readiness cache, the renderer config) | ✅ pass |
 | The full `@tag('unit')` suite (regression) | ✅ 94 pass |
 | Guardrail rejects an emulator host under `ENVIRONMENT=production` (subprocess) | ✅ `ImproperlyConfigured` fires with the exact message |
-| CI — backend (unit + emulator integration), frontend, rules, OpenAPI, e2e | on PR #8 |
+| CI — backend (unit + emulator integration), frontend, rules, OpenAPI, e2e | ✅ green (PR #8, since merged) |
 
 ## 5. Process notes
 
