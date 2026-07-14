@@ -38,6 +38,7 @@ from commands.base import (
 )
 from common.enums import ContributionStatus, ExceptionType, PaymentAttemptStatus
 from common.errors import DomainError
+from repositories.refs import get_in_txn
 
 logger = logging.getLogger("bsw.projections")
 
@@ -258,7 +259,7 @@ def _complete_reclaimed_key(
     from repositories import contributions
 
     def _run(txn):
-        current = service._get_in_txn(txn, contributions.ref(client, contribution_id))
+        current = get_in_txn(txn, contributions.ref(client, contribution_id))
         result = {
             "contributionId": contribution_id,
             "status": (current or {}).get("status"),
@@ -294,12 +295,12 @@ def _handle_indeterminate(
         # already-counted / openExceptionCount decisions below must key off the
         # fresh in-txn state, not the param. Fall back to the snapshot if the
         # in-txn read comes back empty.
-        fresh = service._get_in_txn(txn, contributions.ref(client, contribution_id))
+        fresh = get_in_txn(txn, contributions.ref(client, contribution_id))
         if fresh is None:
             fresh = contribution
         loan_id = fresh.get("loanId")
 
-        attempt = service._get_in_txn(
+        attempt = get_in_txn(
             txn, attempts.ref(client, contribution_id, attempt_number)
         )
         if attempt is None or attempt.get("status") != str(PaymentAttemptStatus.STARTED):
@@ -317,7 +318,7 @@ def _handle_indeterminate(
         if escalate:
             # Read the loan (before writes) so we can bump openExceptionCount.
             loan = (
-                service._get_in_txn(txn, loans.ref(client, loan_id))
+                get_in_txn(txn, loans.ref(client, loan_id))
                 if loan_id
                 else None
             )

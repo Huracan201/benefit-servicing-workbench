@@ -107,6 +107,19 @@ def stream_to_dicts(query) -> list[dict[str, Any]]:
     return [snapshot_to_dict(snap) for snap in query.stream()]
 
 
+def get_in_txn(txn, ref) -> Optional[dict[str, Any]]:
+    """Read one ``DocumentReference`` *inside* a ``Transaction`` as dict-with-id or ``None``.
+
+    ``Transaction.get`` returns a single snapshot or a one-element generator depending on the
+    client version — normalise both, then reuse :func:`snapshot_to_dict`. This is the SINGLE
+    home for the transactional-read helper that was previously copy-pasted per module (as
+    ``_get_in_txn`` / ``_txn_get`` / ``_read``).
+    """
+    got = txn.get(ref)
+    snap = got if hasattr(got, "exists") else next(iter(got), None)
+    return snapshot_to_dict(snap)
+
+
 # --------------------------------------------------------------------------- #
 # Generic reference / read helpers
 # --------------------------------------------------------------------------- #

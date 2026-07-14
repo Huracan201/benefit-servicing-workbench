@@ -118,26 +118,14 @@ def _idem_ref(client: Any, key: str):
 
 
 def _read(txn: Any, ref: Any) -> Optional[dict]:
-    """Read a document inside a transaction, returning its dict or ``None``.
+    """Read a document inside a transaction as dict-with-id or ``None``.
 
-    Firestore's ``Transaction.get`` yields ``DocumentSnapshot`` objects; a single
-    document reference yields exactly one (possibly non-existent) snapshot.
+    Delegates to the single home :func:`repositories.refs.get_in_txn` (normalises the
+    generator-vs-snapshot return of ``Transaction.get`` across client versions).
     """
-    got = txn.get(ref)
-    # ``get`` may return a generator of snapshots or a single snapshot depending
-    # on the client version — normalise both.
-    snap = None
-    if hasattr(got, "exists"):
-        snap = got
-    else:
-        for candidate in got:
-            snap = candidate
-            break
-    if snap is None or not getattr(snap, "exists", False):
-        return None
-    data = snap.to_dict() or {}
-    data["id"] = snap.id
-    return data
+    from repositories.refs import get_in_txn
+
+    return get_in_txn(txn, ref)
 
 
 def _lease_valid(record: dict) -> bool:

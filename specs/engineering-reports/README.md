@@ -11,7 +11,7 @@ Per-phase engineering reports for the BenefitServicing Workbench — what was bu
 | 3 — Async workflows (Cloud Tasks + projections) | [phase-3-async-workflows.md](./phase-3-async-workflows.md) | ✅ Merged (`b68fc6f`, PR #5) — CI green + CodeRabbit addressed |
 | 4 — Workbench UI (part 1: design system + read screens) | [phase-4-part-1-design-system-and-read-screens.md](./phase-4-part-1-design-system-and-read-screens.md) | ✅ Merged to `main` (PR #6) |
 | 4 — Workbench UI (part 2: command surface, worklists & e2e) | [phase-4-part-2-command-surface-and-worklists.md](./phase-4-part-2-command-surface-and-worklists.md) | ✅ Merged to `main` (`f70a9a0`, PR #7) — CI 6/6 green + CodeRabbit addressed |
-| 5 — Testing & hardening | [phase-5-testing-and-hardening.md](./phase-5-testing-and-hardening.md) | 🟢 PR #8 — hardening verified by running; CI running |
+| 5 — Testing & hardening | [phase-5-testing-and-hardening.md](./phase-5-testing-and-hardening.md) | ✅ Merged to `main` (PR #8) |
 | Security review — Phase 3 + 4 | [security-review-phase-3-4.md](./security-review-phase-3-4.md) | ✅ Reviewed (no CRITICAL/HIGH/MED; all Phase-3 prereqs landed); 8 LOW → Phase 5 |
 
 These are point-in-time records; the authoritative design is always `specs/`.

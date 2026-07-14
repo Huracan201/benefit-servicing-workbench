@@ -29,6 +29,8 @@ imported lazily so the module ``py_compile``s in the offline sandbox.
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import replace
 from typing import Any, Callable, Optional
 
@@ -62,6 +64,7 @@ from common.money import cap_posted
 from common.periods import period_label
 from common.state_machines import assert_transition
 from common import invariants
+from core.logging_utils import log_event
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -69,6 +72,10 @@ from common import invariants
 CURRENCY = "USD"
 OPERATION_PROCESS = "PROCESS_CONTRIBUTION"
 OPERATION_RETRY = "RETRY_CONTRIBUTION"
+
+# Money-path structured logging (specs/16 §16.2): the two-phase payment previously emitted
+# no telemetry. The processor key is passed as `idempotencyKey` so log_event HASHES it.
+_logger = logging.getLogger("bsw.payments")
 
 # Entity-type tags used on servicing events / exceptions.
 _ENTITY_CONTRIBUTION = "scheduledContribution"
@@ -108,20 +115,14 @@ def _adapter_default(adapter, client):
 
 
 def _get_in_txn(txn, ref) -> Optional[dict]:
-    """Read a single ``DocumentReference`` inside ``txn`` as dict-with-id/None."""
-    got = txn.get(ref)
-    snap = None
-    if hasattr(got, "exists"):
-        snap = got
-    else:
-        for candidate in got:
-            snap = candidate
-            break
-    if snap is None or not getattr(snap, "exists", False):
-        return None
-    data = snap.to_dict() or {}
-    data["id"] = snap.id
-    return data
+    """Read a ``DocumentReference`` inside ``txn`` as dict-with-id/None.
+
+    Delegates to the single home :func:`repositories.refs.get_in_txn` (lazy import to keep
+    the offline ``py_compile`` clean, matching this module's google.cloud pattern).
+    """
+    from repositories.refs import get_in_txn
+
+    return get_in_txn(txn, ref)
 
 
 def _next_scheduled_in_txn(txn, client, agreement_id: str) -> Optional[dict]:
@@ -446,9 +447,9 @@ def finalize_success(
     # event. Only reachable via loan payoff (a still-SCHEDULED installment implies
     # remaining commitment > 0, so benefit_completed came from loan_paid_off),
     # hence reason "LOAN_PAID_OFF". This inline cancellation is bounded by the
-    # term length (well under Firestore's 500-write/txn cap — safe for demo
-    # scale); at production scale it defers to the async
-    # cancel-future-contributions task (Phase 3).
+    # term length (well under Firestore's 500-write/txn cap), so it is the SOLE
+    # mechanism — there is no size threshold that hands off to the async
+    # cancel-future-contributions task.
     for inst in to_cancel:
         if inst["id"] == contribution_id:
             continue  # never cancel the installment we just POSTED
@@ -976,6 +977,12 @@ def process_contribution(
         processor_idempotency_key = payload["processorIdempotencyKey"]
 
         # ---- Phase 2: charge (NO transaction) -----------------------------
+        _charge_started = time.monotonic()
+        log_event(
+            _logger, logging.INFO, "payment charge started",
+            operation=OPERATION_PROCESS, entityId=contribution_id, result="CHARGE_STARTED",
+            correlationId=ctx.correlation_id, idempotencyKey=processor_idempotency_key,
+        )
         charge_result = adapter.charge(
             processor_idempotency_key=processor_idempotency_key,
             amount_cents=payload["requestedAmountCents"],
@@ -986,6 +993,12 @@ def process_contribution(
                 "periodLabel": payload.get("periodLabel"),
                 "attemptNumber": attempt_number,
             },
+        )
+        log_event(
+            _logger, logging.INFO, "payment charge completed",
+            operation=OPERATION_PROCESS, entityId=contribution_id, result=charge_result.status,
+            durationMs=round((time.monotonic() - _charge_started) * 1000),
+            correlationId=ctx.correlation_id, idempotencyKey=processor_idempotency_key,
         )
 
         # ---- Phase 3: finalize (transaction) ------------------------------

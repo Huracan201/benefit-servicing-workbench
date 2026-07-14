@@ -184,7 +184,9 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 function asOperationStatus(value: unknown): OperationStatus | null {
-  if (value && typeof value === "object" && "state" in value) {
+  // The server's 202 body carries `status` (e.g. "IN_PROGRESS"), not `state` — matching
+  // commands.base.OperationInProgress.to_body / openapi OperationStatus.
+  if (value && typeof value === "object" && "status" in value) {
     return value as OperationStatus;
   }
   return null;
@@ -210,8 +212,8 @@ function resolveRetryAfterSeconds(response: Response, op: OperationStatus | null
   const fromHeader = parseHeaderInt(response.headers.get("Retry-After"));
   const seconds =
     fromHeader ??
-    (typeof op?.retryAfterSeconds === "number" && op.retryAfterSeconds >= 0
-      ? op.retryAfterSeconds
+    (typeof op?.retryAfter === "number" && op.retryAfter >= 0
+      ? op.retryAfter
       : DEFAULT_RETRY_AFTER_SECONDS);
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
 }
