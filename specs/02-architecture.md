@@ -113,7 +113,8 @@ benefit-servicing-workbench/
 │   ├── cloud-run/ cloud-tasks/ cloud-scheduler/ scripts/ environments/
 ├── specs/                    # this documentation set
 ├── docs/                     # architecture diagrams, screenshots, demo script
-├── README.md  Makefile         # `make demo` — one-command local stack
+├── README.md
+├── Makefile                   # `make demo` — one-command local stack
 └── .github/workflows/        # CI
 ```
 
