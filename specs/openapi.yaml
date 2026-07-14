@@ -684,25 +684,35 @@ components:
             message: { type: string }
             correlationId: { type: string }
     OperationStatus:
+      # The 202 body from commands.base.OperationInProgress.to_body.
       type: object
-      required: [state, operation]
+      required: [status]
       properties:
-        state:
+        status:
           type: string
           enum: [ACCEPTED, IN_PROGRESS, COMPLETED, FAILED]
-        operation: { type: string, example: ACTIVATE_BENEFIT }
-        entityType: { type: string }
-        entityId: { type: string }
-        retryAfterSeconds: { type: integer }
+          example: IN_PROGRESS
+        retryAfter: { type: integer, minimum: 0, description: Seconds hint; the Retry-After header is authoritative. }
         correlationId: { type: string }
+        state:
+          type: object
+          additionalProperties: true
+          description: Optional advisory entity-state snapshot.
     Readiness:
+      # The GET /readiness body from core.views.readiness.
       type: object
+      required: [status, dependencies]
       properties:
-        status: { type: string, enum: [ready, not_ready] }
+        status: { type: string, enum: [ok, unavailable] }
         dependencies:
           type: object
-          additionalProperties: { type: string, enum: [ok, unreachable] }
-          example: { firestore: ok, cloudTasks: ok }
+          additionalProperties:
+            type: object
+            required: [status]
+            properties:
+              status: { type: string, enum: [ok, unavailable, not_configured] }
+              error: { type: string }
+          example: { firestore: { status: ok }, cloudTasks: { status: not_configured } }
 
     # ---------- resource representations ----------
     BenefitAgreement:

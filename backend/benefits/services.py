@@ -57,6 +57,7 @@ from commands.base import (
 )
 from common import errors as domain_errors
 from common import state_machines
+from common.money import MAX_TERM_MONTHS
 from common.enums import (
     BenefitStatus,
     EmployerStatus,
@@ -321,6 +322,16 @@ def activate_benefit(
 
             total = int(agreement.get("totalCommitmentCents"))
             term = int(agreement.get("termMonths"))
+            if term < 1 or term > MAX_TERM_MONTHS:
+                # Bound the schedule length so the loan-payoff path can cancel
+                # every remaining installment inside one finalize transaction
+                # without exceeding Firestore's 500-write cap (see
+                # common.money.MAX_TERM_MONTHS). Reject here as a 422 — before any
+                # state change or money movement — so the inline cancel is
+                # provably safe and no payment can wedge on an over-long term.
+                raise Unprocessable(
+                    f"termMonths must be between 1 and {MAX_TERM_MONTHS}"
+                )
 
             # --- PENDING -> ACTIVATING: record the schedule parameters; the
             #     schedule generation AND the ACTIVATING -> ACTIVE finalize (loan

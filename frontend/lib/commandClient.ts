@@ -32,6 +32,7 @@ import type {
   DismissExceptionRequest,
   EmploymentChangeResult,
   EmploymentStatusChangeRequest,
+  OperationState,
   OperationStatus,
   ProcessContributionResult,
   ReasonRequest,
@@ -183,9 +184,24 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+const OPERATION_STATES: readonly OperationState[] = [
+  "ACCEPTED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "FAILED",
+];
+
 function asOperationStatus(value: unknown): OperationStatus | null {
-  if (value && typeof value === "object" && "state" in value) {
-    return value as OperationStatus;
+  // The server's 202 body carries `status` (e.g. "IN_PROGRESS"), not `state` — matching
+  // commands.base.OperationInProgress.to_body / openapi OperationStatus. Validate that
+  // `status` is a KNOWN OperationState before casting so `null`, an unknown string, or a
+  // malformed body falls through to the error path instead of entering the poll loop with
+  // a bogus status.
+  if (value && typeof value === "object" && "status" in value) {
+    const status = (value as { status?: unknown }).status;
+    if (typeof status === "string" && (OPERATION_STATES as readonly string[]).includes(status)) {
+      return value as OperationStatus;
+    }
   }
   return null;
 }
@@ -210,8 +226,8 @@ function resolveRetryAfterSeconds(response: Response, op: OperationStatus | null
   const fromHeader = parseHeaderInt(response.headers.get("Retry-After"));
   const seconds =
     fromHeader ??
-    (typeof op?.retryAfterSeconds === "number" && op.retryAfterSeconds >= 0
-      ? op.retryAfterSeconds
+    (typeof op?.retryAfter === "number" && op.retryAfter >= 0
+      ? op.retryAfter
       : DEFAULT_RETRY_AFTER_SECONDS);
   return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
 }

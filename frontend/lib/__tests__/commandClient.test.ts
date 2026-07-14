@@ -112,7 +112,7 @@ describe("sendCommand", () => {
   it("returns a pending outcome once the poll budget is exhausted", async () => {
     // A fresh Response per call — a body can only be read once.
     fetchMock.mockImplementation(async () =>
-      jsonResponse(202, { state: "IN_PROGRESS", operation: "ACTIVATE_BENEFIT" }, {
+      jsonResponse(202, { status: "IN_PROGRESS", retryAfter: 0, correlationId: "c1" }, {
         "Retry-After": "0",
       }),
     );
@@ -121,7 +121,7 @@ describe("sendCommand", () => {
 
     expect(outcome.status).toBe("pending");
     if (outcome.status === "pending") {
-      expect(outcome.operation?.state).toBe("IN_PROGRESS");
+      expect(outcome.operation?.status).toBe("IN_PROGRESS");
     }
     expect(fetchMock).toHaveBeenCalledTimes(2); // initial + 1 poll
   });

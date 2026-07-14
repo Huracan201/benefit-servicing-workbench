@@ -32,12 +32,13 @@ export type OperationState = "ACCEPTED" | "IN_PROGRESS" | "COMPLETED" | "FAILED"
 
 /** Advisory status returned with a 202; the UI should still watch Firestore. */
 export interface OperationStatus {
-  state: OperationState;
-  operation: string;
-  entityType?: string;
-  entityId?: string;
-  retryAfterSeconds?: number;
+  /** The server sends `"IN_PROGRESS"` on a 202 (commands.base.OperationInProgress.to_body). */
+  status: OperationState;
+  /** Seconds hint (the server's `retryAfter`); the `Retry-After` header is authoritative. */
+  retryAfter?: number;
   correlationId?: string;
+  /** Optional entity-state snapshot the server may attach; advisory only. */
+  state?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

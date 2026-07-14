@@ -1,6 +1,6 @@
 # Phase 5 — Testing & hardening
 
-**Status:** 🟢 On `release/phase-5` — **PR #8**, draft. Backend hardening **verified by running** (12 new tests + the 94-test unit suite + `manage.py check`, green in a venv). Companion artifact: the [Phase 3+4 security review](./security-review-phase-3-4.md).
+**Status:** ✅ Merged to `main` (PR #8). Backend hardening **verified by running** (12 new tests + the 94-test unit suite + `manage.py check`, green in a venv). Companion artifact: the [Phase 3+4 security review](./security-review-phase-3-4.md).
 
 **Phase:** 5 — Testing & hardening ([specs/19 §19.2](../19-delivery-and-scope.md))
 
@@ -15,8 +15,8 @@ What was already delivered before this phase opened:
 
 | Phase-5 requirement | Where it landed |
 |---|---|
-| Backend unit + emulator integration (concurrency, fencing, reconciliation, security-rule gates) | Phases 2–3 — 29 backend test files + the 12-test Firestore-rules suite |
-| Frontend tests | Phase 4 — 23 unit/component files |
+| Backend unit + emulator integration (concurrency, fencing, reconciliation, security-rule gates) | Phases 2–3 — 32 backend test files + the 12-test Firestore-rules suite |
+| Frontend tests | Phase 4 — 3 unit/component test files (20 tests) |
 | Playwright critical paths A & B (+ STALE_WRITE / 403 / 202) | Phase 4 part 2 — 5 e2e specs, CI-active |
 | Structured logging + correlation-id; health/readiness | Phase 1 |
 | Authorization-boundary review | the Phase 1+2 security review (PR #4) + the live 403 e2e |
@@ -48,7 +48,7 @@ This phase marks a shift: the sandbox has a working toolchain (npm + network + J
 | The 12 new hardening unit tests (correlation-id sanitization, the wired header stack, the readiness cache, the renderer config) | ✅ pass |
 | The full `@tag('unit')` suite (regression) | ✅ 94 pass |
 | Guardrail rejects an emulator host under `ENVIRONMENT=production` (subprocess) | ✅ `ImproperlyConfigured` fires with the exact message |
-| CI — backend (unit + emulator integration), frontend, rules, OpenAPI, e2e | on PR #8 |
+| CI — backend (unit + emulator integration), frontend, rules, OpenAPI, e2e | ✅ green (PR #8, since merged) |
 
 ## 5. Process notes
 

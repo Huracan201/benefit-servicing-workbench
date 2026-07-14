@@ -1,6 +1,6 @@
 import unittest
 
-from common.money import cap_posted, dollars, solve_schedule
+from common.money import MAX_TERM_MONTHS, cap_posted, dollars, solve_schedule
 
 
 class SolveScheduleTest(unittest.TestCase):
@@ -49,6 +49,16 @@ class SolveScheduleTest(unittest.TestCase):
             solve_schedule(1.5, 3)  # type: ignore[arg-type]
         with self.assertRaises(TypeError):
             solve_schedule(True, 3)  # bool is not an int here
+
+    def test_term_length_cap(self):
+        # The upper bound keeps the loan-payoff inline cancel (3 writes/installment)
+        # under Firestore's 500-write/txn limit. The maximum term still solves; one
+        # month past it is rejected (activation raises a 422 first, this is the
+        # defense-in-depth chokepoint).
+        self.assertEqual(len(solve_schedule(3_000_000, MAX_TERM_MONTHS)), MAX_TERM_MONTHS)
+        self.assertEqual(sum(solve_schedule(3_000_000, MAX_TERM_MONTHS)), 3_000_000)
+        with self.assertRaises(ValueError):
+            solve_schedule(3_000_000, MAX_TERM_MONTHS + 1)
 
 
 class CapPostedTest(unittest.TestCase):
