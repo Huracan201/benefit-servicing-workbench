@@ -20,6 +20,7 @@ The pinned operational values, infrastructure definitions, and runbook steps the
 ## 21.2 GCP topology
 
 - **Region:** `us-east4`. **Cloud Run service `bsw-api`** (one service, both surfaces): min-instances 1, concurrency 80, 1 vCPU / 512 MiB, `--allow-unauthenticated` (Django is the auth boundary for both `/api/v1` and `/internal` — [12 §12.5](./12-auth-and-security.md)).
+  - **Change from spec (demo cost knob):** the `infrastructure/` scripts default **`MIN_INSTANCES=0`** (scale-to-zero: $0 when idle, ~2 s cold start on the first request after idle) rather than the production `1` (always warm, no cold start, billed 24/7). Set `MIN_INSTANCES=1` in `infrastructure/config.env` for the production posture. `MAX_INSTANCES` (default 2) caps the billable fan-out. This is the only deliberate demo deviation from the pinned topology; everything else here is authored as-is.
 - **Service accounts:** runtime `bsw-api@…` — `roles/datastore.user`, `roles/firebaseauth.admin` (claims + disable), `roles/cloudtasks.enqueuer`, `roles/logging.logWriter`, `roles/monitoring.metricWriter`, plus `iam.serviceAccounts.actAs` on the invoker SA (to mint OIDC tasks). Invoker `bsw-invoker@…` — `roles/run.invoker` on `bsw-api`. **No JSON key files anywhere** — Cloud Run uses ADC; local dev uses the emulator (no credentials).
 - **Cloud Tasks queues** (all with OIDC → `/internal/tasks/*`):
 

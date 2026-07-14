@@ -710,9 +710,9 @@ components:
             type: object
             required: [status]
             properties:
-              status: { type: string, enum: [ok, unavailable, not_configured] }
+              status: { type: string, enum: [ok, configured, unavailable, not_configured] }
               error: { type: string }
-          example: { firestore: { status: ok }, cloudTasks: { status: not_configured } }
+          example: { firestore: { status: ok }, cloudTasks: { status: configured } }
 
     # ---------- resource representations ----------
     BenefitAgreement:

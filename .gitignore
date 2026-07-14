@@ -23,3 +23,6 @@ coverage/
 
 # Claude Code session runtime state
 .claude/*.lock
+
+# Deploy config — names a real GCP project; copied from infrastructure/config.env.example
+infrastructure/config.env

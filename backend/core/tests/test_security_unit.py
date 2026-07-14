@@ -9,7 +9,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.http import HttpResponse
-from django.test import RequestFactory, SimpleTestCase, tag
+from django.test import RequestFactory, SimpleTestCase, override_settings, tag
 
 from core import views as core_views
 from core.logging_utils import CORRELATION_ID_HEADER, CORRELATION_ID_META_KEY
@@ -173,6 +173,49 @@ class ReadinessCacheTests(SimpleTestCase):
             core_views._readiness_cache["at"] -= core_views._READINESS_TTL_SECONDS + 1
             core_views._check_firestore()
         self.assertEqual(calls["n"], 2)
+
+
+@tag("unit")
+class ReadinessCloudTasksReportingTests(SimpleTestCase):
+    """/readiness reports Cloud Tasks as a CONFIGURATION status (a config reflection, not a
+    live ping — enqueuing a probe would have side effects), mirroring internal.enqueue's
+    TASK_EXECUTION_MODE dispatch + the /internal OIDC env. Non-gating in every case."""
+
+    databases: list[str] = []
+
+    @override_settings(TASK_EXECUTION_MODE="inline")
+    def test_inline_is_not_configured(self) -> None:
+        # Emulator / local / CI: the async surface runs in-process, so Cloud Tasks is
+        # intentionally absent — reported, not a fault.
+        self.assertEqual(core_views._cloud_tasks_status(), {"status": "not_configured"})
+
+    @override_settings(
+        TASK_EXECUTION_MODE="cloud",
+        TASKS_AUDIENCE="https://bsw-api-xyz.run.app",
+        TASKS_INVOKER_SA="bsw-invoker@demo.iam.gserviceaccount.com",
+    )
+    def test_cloud_with_oidc_env_is_configured(self) -> None:
+        self.assertEqual(core_views._cloud_tasks_status(), {"status": "configured"})
+
+    @override_settings(TASK_EXECUTION_MODE="cloud", TASKS_AUDIENCE="", TASKS_INVOKER_SA="")
+    def test_cloud_missing_env_is_unavailable(self) -> None:
+        # A real misconfiguration: cloud dispatch on but the OIDC audience/invoker unset
+        # would have tasks rejected at the /internal boundary — surface it.
+        result = core_views._cloud_tasks_status()
+        self.assertEqual(result["status"], "unavailable")
+        self.assertIn("TASKS_AUDIENCE", result["error"])
+
+    @override_settings(TASK_EXECUTION_MODE="cloud", TASKS_AUDIENCE="", TASKS_INVOKER_SA="")
+    def test_cloud_tasks_unavailable_does_not_gate_readiness(self) -> None:
+        # Even a cloudTasks 'unavailable' must not flip the top-level status to 503;
+        # firestore is the only hard dependency (specs/16 §16.5).
+        with patch.object(core_views, "_check_firestore", return_value={"status": "ok"}):
+            response = self.client.get("/readiness")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["dependencies"]["firestore"]["status"], "ok")
+        self.assertEqual(body["dependencies"]["cloudTasks"]["status"], "unavailable")
 
 
 @tag("unit")

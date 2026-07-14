@@ -2,7 +2,19 @@
 
 An operations platform for servicing **employer-sponsored student-loan repayment benefits**: benefit activation, employer-funded contribution schedules, simulated payment processing with real transactional/idempotency/recovery controls, employment-change cascades, exception handling, and an immutable audit timeline. Firestore is the primary system of record; a Django command backend owns every write; a Next.js workbench subscribes read-only in real time.
 
-**Status: Phases 1–5 merged; Phase 6 (deployment) is the single remaining phase.** Phases 1 (the framework-free `backend/common/` core, 60 unit tests + the scaffold), 2 (the full **domain command layer** — activation, the two-phase payment, suspend/resume/terminate, employment cascade, exceptions, notes, admin), and 3 (the **async layer** — OIDC-gated Cloud Tasks/Scheduler handlers behind a 202-cloud/200-inline completion protocol, a reconciliation sweeper + lease reaper, and recompute-from-source read-model projections) are built, QA'd, and merged to `main` (PRs #1–#3, #5, each CI-green + CodeRabbit-reviewed; a read-only security review + its hardening also merged, PR #4). **Phase 4 (the Workbench UI)** brings the operator app up over that backend: the *ledger + control room* design system + the **dashboard** + **loan portfolio** (**part 1**, PR #6 — merged), and the loan/benefit **detail screen** + the payment/exception **worklists** + a minimal emulator **auth surface** + the Playwright critical-path **e2e** (**part 2**, PR #7 — merged). **Phase 5** — an adversarial security review of the async + UI layers (no CRITICAL/HIGH/MEDIUM; all Phase-3 prerequisites verified) plus its hardening — is merged (PR #8). Next: **Phase 6 — deployment** (`U12` — Cloud Run + the Cloud Tasks queues + Cloud Scheduler crons + hosting + monitoring + the readiness flip + the demo), per [specs/19](specs/19-delivery-and-scope.md). Per-phase [engineering reports](specs/engineering-reports/) track what shipped.
+**Status: Phases 1–5 merged; Phase 6 (deployment) delivers the infrastructure-as-code + a one-command local demo (`make demo`), with the live cloud apply as an authored, cost-sensitive runbook.** Phases 1 (the framework-free `backend/common/` core, 60 unit tests + the scaffold), 2 (the full **domain command layer** — activation, the two-phase payment, suspend/resume/terminate, employment cascade, exceptions, notes, admin), and 3 (the **async layer** — OIDC-gated Cloud Tasks/Scheduler handlers behind a 202-cloud/200-inline completion protocol, a reconciliation sweeper + lease reaper, and recompute-from-source read-model projections) are built, QA'd, and merged to `main` (PRs #1–#3, #5, each CI-green + CodeRabbit-reviewed; a read-only security review + its hardening also merged, PR #4). **Phase 4 (the Workbench UI)** brings the operator app up over that backend: the *ledger + control room* design system + the **dashboard** + **loan portfolio** (**part 1**, PR #6 — merged), and the loan/benefit **detail screen** + the payment/exception **worklists** + a minimal emulator **auth surface** + the Playwright critical-path **e2e** (**part 2**, PR #7 — merged). **Phase 5** — an adversarial security review of the async + UI layers (no CRITICAL/HIGH/MEDIUM; all Phase-3 prerequisites verified) plus its hardening — is merged (PR #8). **Phase 6 — deployment** (`U12`) delivers the deploy IaC ([`infrastructure/`](infrastructure/) — Cloud Run + the Cloud Tasks queues + Cloud Scheduler crons + the `/readiness` flip), the `make demo` local bring-up, and [`docs/demo-script.md`](docs/demo-script.md); the live Cloud Run + Vercel apply is an authored runbook (scale-to-zero + teardown), per [specs/19](specs/19-delivery-and-scope.md). Per-phase [engineering reports](specs/engineering-reports/) track what shipped.
+
+## Run the full demo
+
+```bash
+make demo    # emulator + seeded data + Django (inline) + Next.js workbench; Ctrl-C to stop
+```
+
+Open **http://localhost:3000** and sign in as `mgr@demo.test` / `DemoPass!234`. Follow
+[`docs/demo-script.md`](docs/demo-script.md) — a ~2-minute walk through the money path, the
+idempotency + `If-Match` guards, exception recovery, and server-side authorization. Zero cloud
+cost; the deterministic seed is 20 borrowers across three employers, each a distinct scenario.
+Prereqs: Python 3.12 + backend deps, Node 20 + `frontend/` deps, Java 21 + firebase-tools.
 
 ## Start here
 
@@ -15,6 +27,29 @@ An operations platform for servicing **employer-sponsored student-loan repayment
 | 🚀 **Deploy & ops runbook** | [`specs/21-deployment-and-operations.md`](specs/21-deployment-and-operations.md) |
 | 🧾 **Review traceability** | [Appendix A](specs/appendix-a-review-findings.md) (v1→v2) · [Appendix B](specs/appendix-b-handoff-audit.md) (pre-handoff audit) |
 | 🧱 **Engineering reports** | [specs/engineering-reports/](specs/engineering-reports/) — per-phase build + QA record |
+
+## Architecture
+
+CQRS-style split: the frontend **reads** directly from Firestore (real-time subscriptions,
+authorized by security rules on the role claim); **every write** goes through a Django command
+(transactions, state machines, invariants, idempotency). Async work runs on Cloud Tasks +
+Scheduler behind an OIDC-gated `/internal` surface. See [specs/02](specs/02-architecture.md).
+
+```mermaid
+flowchart LR
+  UI["Next.js workbench<br/>(Vercel)"]
+  API["Django command API<br/>(Cloud Run)"]
+  FS[("Firestore<br/>system of record")]
+  CT["Cloud Tasks"]
+  CS["Cloud Scheduler"]
+
+  UI -- "reads: real-time subscriptions<br/>(security-rule authz)" --> FS
+  UI -- "writes: commands (202 poll)" --> API
+  API -- "transactions · state machines · invariants" --> FS
+  API -- "enqueue" --> CT
+  CT -- "OIDC → /internal/tasks/*" --> API
+  CS -- "OIDC → /internal/jobs/*" --> API
+```
 
 ## What runs today
 
@@ -36,6 +71,18 @@ cd frontend && npm run lint && npm run test && npm run build
 
 The backend core tests run offline (`cd backend && python -m unittest discover -s common/tests -p 'test_*.py' -t .`); the Django command + async layer (`manage.py check`, `--tag=unit`, and the emulator integration suite — activation, the two-phase payment, the concurrency + fencing gates, the reconciliation sweeper + lease reaper, and the projection flows) plus the frontend (`npm run lint`/`test`/`build`) and the Playwright critical-path **e2e** (seed → Django → Next → Playwright, via `infrastructure/scripts/e2e.sh`) run on CI. `.github/workflows/ci.yml` gates the backend/frontend/e2e jobs on file presence — **backend, frontend, and e2e are all active** now that part 2 shipped a committed lockfile + the e2e harness.
 
+## Deploy
+
+Topology is pinned in [specs/21](specs/21-deployment-and-operations.md) (Cloud Run + Firestore + Cloud Tasks/Scheduler; frontend on Vercel). The [`infrastructure/`](infrastructure/) scripts realize the runbook as idempotent, parameterized `bash`+`gcloud`:
+
+```bash
+cp infrastructure/config.env.example infrastructure/config.env   # set PROJECT_ID, etc.
+bash infrastructure/scripts/provision-all.sh                     # IAM → API → queues → scheduler → Firestore
+bash infrastructure/scripts/teardown.sh                          # delete the billable resources
+```
+
+Cost-sensitive by default: Cloud Run scales to zero (`MIN_INSTANCES=0` — a documented [specs/21 §21.2](specs/21-deployment-and-operations.md) demo knob) and `teardown.sh` stops the meter. CI shellchecks these scripts and builds `backend/Dockerfile` for real.
+
 ## Not yet built
 
-**Deploy-time IaC** (`infrastructure/` — the Cloud Tasks queues + Cloud Scheduler crons + the readiness flip to `configured`, `U12`), the `propagate-denormalized` fan-out task (`U13`, awaiting its producer command), and `docs/demo-script.md`. The whole application stack — the backend command + async layer and the full operator workbench — is built, merged, security-reviewed, and hardened (Phases 1–5 on `main`).
+**A live public deployment** — the [`infrastructure/`](infrastructure/) IaC + runbook are authored and CI-checked; running them against a real GCP project + Vercel is a cost/credentials step the operator drives (`gcloud auth`, billing). And the `propagate-denormalized` fan-out task (`U13`, awaiting its producer command). The application stack, the deploy IaC, and the `make demo` local demo are built (Phases 1–5 merged on `main`; Phase 6 the deploy layer).

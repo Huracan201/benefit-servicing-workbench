@@ -149,6 +149,26 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  infra:
+    name: Infrastructure (shellcheck + Docker build)
+    runs-on: ubuntu-latest
+    needs: detect
+    if: ${{ needs.detect.outputs.backend == 'true' }}
+    steps:
+      # This job runs arbitrary build steps (pip installs, Dockerfile instructions) and never
+      # pushes, so don't leave the GITHUB_TOKEN in git config (artipacked / zizmor).
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # ShellCheck ships on the GitHub runner. SC1090/SC1091 (can't follow the dynamic
+      # `source .../lib.sh`) are excluded — lib.sh is linted directly in the same glob.
+      - name: ShellCheck the provisioning + demo scripts
+        run: shellcheck -e SC1090 -e SC1091 infrastructure/scripts/*.sh
+      # Build the Cloud Run image for real (validates backend/Dockerfile end to end — base
+      # image, pip install, non-root user, gunicorn entrypoint). Not pushed anywhere.
+      - name: Build the Cloud Run image (backend/Dockerfile)
+        run: docker build -t bsw-api:ci backend/
+
   e2e:
     name: E2E (Playwright critical paths)
     runs-on: ubuntu-latest
