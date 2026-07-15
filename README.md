@@ -104,8 +104,6 @@ This is a **public demo**, and it is built to be one safely:
 - **Self-healing.** A daily `reset-demo` job re-seeds the dataset, so demo-data churn does not persist.
 - **No pivot.** An app user — even "admin" — can only touch the app's own Firestore model; they cannot assume the service account, run code, or reach the GCP project.
 
-Prefer it fully private? Put the frontend behind Vercel's password protection and share one password with reviewers — the in-app demo creds then sit behind that gate.
-
 ## Not yet built
 
 **Only the `propagate-denormalized` fan-out (`U13`)** — deferred, awaiting its producer command. Everything else is built, merged, **and deployed live**: the application stack, the deploy IaC, the `make demo` local demo (Phases 1–6 on `main`), plus a running password-gated demo on Cloud Run + Vercel — the full runbook + the script gaps the real deploy exposed are in the [devops deployment report](specs/engineering-reports/deployment-devops.md).
