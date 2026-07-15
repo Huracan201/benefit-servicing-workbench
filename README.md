@@ -2,7 +2,7 @@
 
 An operations console for servicing **employer-sponsored student-loan repayment benefits** — the back office where a servicing team activates benefits, runs employer-funded contribution schedules, processes payments, works exceptions, and reads an immutable audit trail. Firestore is the system of record; a Django command backend owns every write; a Next.js workbench reads it live.
 
-> **The point of the build:** use Firestore *responsibly* for a financial workflow — without pretending a document database removes the need for explicit transactions, idempotency, crash-recovery, and audit controls. Everything here follows from that one question.
+> **The point of the build:** use Firestore as the system of record for a financial workflow — with the explicit transaction, idempotency, crash-recovery, and audit controls a document database doesn't give you for free. Everything here follows from that.
 
 ![The portfolio dashboard — live read models over the seeded book: KPI tiles, scheduled-vs-posted trend, contribution status mix, and a real-time servicing timeline.](docs/img/dashboard.png)
 
