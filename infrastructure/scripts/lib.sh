@@ -38,10 +38,17 @@ source "${CONFIG_FILE}"
 export PROJECT_ID REGION SERVICE_NAME MIN_INSTANCES MAX_INSTANCES CONCURRENCY CPU MEMORY
 export DJANGO_SECRET_KEY_SECRET CORS_ALLOWED_ORIGINS RUNTIME_SA INVOKER_SA
 
-# The live Cloud Run URL (the OIDC audience for tasks/jobs). Resolved lazily — only valid after
-# deploy-api.sh has created the service. Prints nothing if the service does not exist yet.
-api_url() {
-  gcloud run services describe "${SERVICE_NAME}" \
-    --region "${REGION}" --project "${PROJECT_ID}" \
-    --format 'value(status.url)' 2>/dev/null || true
+# Cloud Run's DETERMINISTIC per-service URL: https://<service>-<projectnumber>.<region>.run.app.
+# This is the one ALLOWED_HOSTS is set to and that actually serves 200 — `gcloud ... status.url`
+# returns a legacy *.run.app alias that 400s against ALLOWED_HOSTS, so we never host-match on it.
+# It is derivable BEFORE the first deploy (from the project number), so audience/scheduler wiring
+# needs no post-deploy patch.
+PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)' 2>/dev/null || true)"
+service_host() {
+  [ -n "${PROJECT_NUMBER}" ] \
+    || die "could not resolve the project number for '${PROJECT_ID}' (gcloud authed? project set?) — needed to derive the deterministic Cloud Run host"
+  printf '%s-%s.%s.run.app' "${SERVICE_NAME}" "${PROJECT_NUMBER}" "${REGION}"
 }
+service_url()  { printf 'https://%s' "$(service_host)"; }
+# Back-compat alias: provision-scheduler.sh calls api_url() for the OIDC audience.
+api_url() { service_url; }

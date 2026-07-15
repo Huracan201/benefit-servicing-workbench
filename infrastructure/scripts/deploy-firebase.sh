@@ -13,8 +13,10 @@ command -v "${FIREBASE_BIN}" >/dev/null 2>&1 \
   || die "firebase CLI not found — 'npm i -g firebase-tools' or set FIREBASE_BIN='npx firebase-tools'"
 
 log "deploying Firestore rules + indexes to ${PROJECT_ID}…"
+# --force auto-confirms the "delete these indexes?" prompt; --non-interactive fails fast instead
+# of HANGING on a prompt when there is no TTY (this session / CI / any non-interactive runner).
 "${FIREBASE_BIN}" deploy --only firestore:rules,firestore:indexes \
-  --config "${ROOT}/firebase/firebase.json" --project "${PROJECT_ID}"
+  --config "${ROOT}/firebase/firebase.json" --project "${PROJECT_ID}" --force --non-interactive
 
 log "enabling the idempotencyKeys TTL policy (field: expiresAt)…"
 gcloud firestore fields ttls update expiresAt \
