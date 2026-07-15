@@ -19,18 +19,29 @@ gcloud artifacts repositories describe bsw --location "${REGION}" --project "${P
 gcloud builds submit "${ROOT}/backend" --tag "${IMAGE}" --project "${PROJECT_ID}"
 
 log "deploying ${SERVICE_NAME} to Cloud Run (${REGION}, min-instances=${MIN_INSTANCES}, max=${MAX_INSTANCES})…"
-# ALLOWED_HOSTS may be pinned in config.env; otherwise derive it from the deterministic host (the
-# prod guardrail needs an explicit, non-wildcard host). TASKS_AUDIENCE is that same URL.
+
+# Fail BEFORE build/deploy if a prod-guardrail value is missing — otherwise Cloud Run creates a
+# revision that crash-loops on the settings.py boot guardrail.
+case "${INTERNAL_DEV_SECRET:-}" in
+  "" | "dev-internal-secret")
+    die "INTERNAL_DEV_SECRET is empty or the dev default — set it in config.env (e.g. \`openssl rand -base64 32\`); the production guardrail rejects it";;
+esac
+
 API_URL="$(service_url)"
-ALLOWED_HOSTS="${ALLOWED_HOSTS:-$(service_host)}"
-env_vars="ENVIRONMENT=production,DEBUG=0,DJANGO_SETTINGS_MODULE=config.settings"
-env_vars="${env_vars},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},SYSTEM_TIMEZONE=America/New_York"
-env_vars="${env_vars},TASK_EXECUTION_MODE=cloud,TASKS_LOCATION=${REGION},TASKS_INVOKER_SA=${INVOKER_SA}"
-env_vars="${env_vars},CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}"
-# ENVIRONMENT=production guardrail (config/settings.py): ALLOWED_HOSTS must be an explicit,
-# non-wildcard list; INTERNAL_DEV_SECRET must not be the dev default (prod /internal is OIDC);
-# TASKS_AUDIENCE is the deterministic URL the OIDC tasks/jobs authenticate against.
-env_vars="${env_vars},ALLOWED_HOSTS=${ALLOWED_HOSTS},INTERNAL_DEV_SECRET=${INTERNAL_DEV_SECRET},TASKS_AUDIENCE=${API_URL}"
+# ALLOWED_HOSTS ALWAYS includes the deterministic host (API_URL, health checks, and the OIDC task
+# audience all use it); any config.env value is APPENDED, never substituted, so an override cannot
+# drop the host Django must accept.
+allowed_hosts="$(service_host)${ALLOWED_HOSTS:+,${ALLOWED_HOSTS}}"
+
+# '@' delimiter (gcloud ^@^ syntax) so commas inside ALLOWED_HOSTS / CORS_ALLOWED_ORIGINS are
+# literal list separators, not env-var-pair separators.
+env_vars="^@^ENVIRONMENT=production@DEBUG=0@DJANGO_SETTINGS_MODULE=config.settings"
+env_vars="${env_vars}@GOOGLE_CLOUD_PROJECT=${PROJECT_ID}@SYSTEM_TIMEZONE=America/New_York"
+env_vars="${env_vars}@TASK_EXECUTION_MODE=cloud@TASKS_LOCATION=${REGION}@TASKS_INVOKER_SA=${INVOKER_SA}"
+env_vars="${env_vars}@CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}"
+# ENVIRONMENT=production guardrail (config/settings.py): explicit non-wildcard ALLOWED_HOSTS;
+# INTERNAL_DEV_SECRET not the dev default; TASKS_AUDIENCE is the deterministic OIDC audience.
+env_vars="${env_vars}@ALLOWED_HOSTS=${allowed_hosts}@INTERNAL_DEV_SECRET=${INTERNAL_DEV_SECRET}@TASKS_AUDIENCE=${API_URL}"
 
 gcloud run deploy "${SERVICE_NAME}" \
   --image "${IMAGE}" --region "${REGION}" --project "${PROJECT_ID}" \

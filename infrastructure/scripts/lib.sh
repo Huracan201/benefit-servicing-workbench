@@ -44,7 +44,11 @@ export DJANGO_SECRET_KEY_SECRET CORS_ALLOWED_ORIGINS RUNTIME_SA INVOKER_SA
 # It is derivable BEFORE the first deploy (from the project number), so audience/scheduler wiring
 # needs no post-deploy patch.
 PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)' 2>/dev/null || true)"
-service_host() { printf '%s-%s.%s.run.app' "${SERVICE_NAME}" "${PROJECT_NUMBER}" "${REGION}"; }
+service_host() {
+  [ -n "${PROJECT_NUMBER}" ] \
+    || die "could not resolve the project number for '${PROJECT_ID}' (gcloud authed? project set?) — needed to derive the deterministic Cloud Run host"
+  printf '%s-%s.%s.run.app' "${SERVICE_NAME}" "${PROJECT_NUMBER}" "${REGION}"
+}
 service_url()  { printf 'https://%s' "$(service_host)"; }
 # Back-compat alias: provision-scheduler.sh calls api_url() for the OIDC audience.
 api_url() { service_url; }

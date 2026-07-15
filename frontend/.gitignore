@@ -34,3 +34,4 @@ yarn-error.log*
 *.tsbuildinfo
 .vercel
 .env*
+!.env.local.example

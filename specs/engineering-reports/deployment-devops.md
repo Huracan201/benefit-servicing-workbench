@@ -61,6 +61,6 @@ Note: `/loans` defaults to "0 loans · pick a filter" — **intended** (specs/13
 
 ## 6. Teardown & what's left
 
-- **Stop the meter:** `bash infrastructure/scripts/teardown.sh` (deletes the Cloud Run service, queues, scheduler jobs; `--purge` also the SAs). Scale-to-zero means it's ~$0 idle regardless.
+- **Stop the meter:** `bash infrastructure/scripts/teardown.sh` (deletes the Cloud Run service, queues, scheduler jobs; `--purge` also the SAs). Scale-to-zero avoids idle Cloud Run *instance* charges, but Firestore, Cloud Tasks/Scheduler, Artifact Registry, and Secret Manager can still incur small charges — teardown + a **budget alert** are the real total-cost controls.
 - **Optional:** a GCP budget alert ($5–10) closes the last item from the README security-posture note.
 - **Remaining:** the deferred `propagate-denormalized` fan-out (`U13`) — still awaiting its producer command; unrelated to the deploy.
