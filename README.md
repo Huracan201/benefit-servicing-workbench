@@ -24,7 +24,7 @@ make demo    # emulator + seeded data + Django (inline) + Next.js workbench; Ctr
 Open **http://localhost:3000** and sign in as `mgr@demo.test` / `DemoPass!234`. Follow
 [`docs/demo-script.md`](docs/demo-script.md) — a ~2-minute walk through the money path, the
 idempotency + `If-Match` guards, exception recovery, and server-side authorization. Zero cloud
-cost; the deterministic seed is 20 borrowers across three employers, each a distinct scenario.
+cost; the deterministic seed is 20 borrowers across four employers, each a distinct scenario.
 Prereqs: Python 3.12 + backend deps, Node 20 + `frontend/` deps, Java 21 + firebase-tools.
 
 ## Start here

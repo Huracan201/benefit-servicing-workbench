@@ -22,8 +22,8 @@ Then open **http://localhost:3000**. (Live deployment instead? Use its URL — s
 | `ops@demo.test` | OPERATIONS USER | day-to-day servicing; manager actions are locked |
 | `admin@demo.test` | ADMINISTRATOR | + role administration |
 
-The seed is 20 borrowers across three employers (Memorial Health, Northwind Traders, Globex
-Manufacturing), each a different servicing scenario — healthy, failed-awaiting-retry, terminated,
+The seed is 20 borrowers across four employers (Memorial Health, Northwind Traders, Globex
+Manufacturing, Initech Software), each a different servicing scenario — healthy, failed-awaiting-retry, terminated,
 completed, approaching-completion.
 
 ---
