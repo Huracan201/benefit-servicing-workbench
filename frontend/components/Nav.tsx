@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePortfolioCurrent } from "@/lib/readModels";
+import { usingEmulator } from "@/lib/firebase";
 
 export interface NavItem {
   href: string;
@@ -133,7 +134,7 @@ export function Nav({ counts: countsOverride }: NavProps = {}) {
       <p className="mt-auto border-t border-border px-2.5 pt-2.5 text-[10.5px] leading-relaxed text-ink-3">
         Demo build · seed portfolio
         <br />
-        Firestore emulator · 4 employers, 20 borrowers
+        {usingEmulator ? "Firestore emulator" : "Cloud Firestore"} · 4 employers, 20 borrowers
       </p>
     </nav>
   );
