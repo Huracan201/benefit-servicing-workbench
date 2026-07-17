@@ -21,7 +21,7 @@ import {
   query,
   startAfter,
 } from "firebase/firestore";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getFirebaseDb } from "@/lib/firebase";
 
 /** Firestore's UI table page size (specs/21 §21.1: UI tables 25). */
@@ -38,6 +38,14 @@ export interface CollectionPageOptions {
   cursor?: QueryDocumentSnapshot<DocumentData> | null;
   /** Set false to pause the subscription. */
   enabled?: boolean;
+  /**
+   * Optional STABLE identity for the logical query (e.g. a primitive filter key).
+   * When provided it — not the `constraints` array's object identity — decides when
+   * the live listener re-subscribes, so an accidentally unmemoized `constraints`
+   * array can never force a re-subscribe (a full billed re-read). Omit to keep the
+   * legacy behavior of keying on the `constraints` array identity.
+   */
+  queryKey?: string;
 }
 
 export interface CollectionPageState<T> {
@@ -66,7 +74,7 @@ export function useCollectionPage<T>(
   collectionPath: string,
   options: CollectionPageOptions,
 ): CollectionPageState<T> {
-  const { constraints, pageSize, cursor, enabled = true } = options;
+  const { constraints, pageSize, cursor, enabled = true, queryKey } = options;
   const size = clampPageSize(pageSize);
 
   // Stable key so we only re-subscribe when the effective query changes. Query
@@ -74,6 +82,19 @@ export function useCollectionPage<T>(
   // `constraints` array referentially stable per logical query (e.g. via useMemo).
   const constraintsRef = useRef(constraints);
   constraintsRef.current = constraints;
+
+  // Key the listener on the cursor's STABLE doc path, not the snapshot object.
+  // Every snapshot delivery re-mints `lastVisible` as a fresh QueryDocumentSnapshot
+  // (below), so depending on the cursor OBJECT would tear down and re-subscribe the
+  // listener on every delivery — re-billing the whole limit(size+1) page ~20×/sec
+  // for an otherwise-idle subscription. The path is identical for a re-delivered
+  // snapshot of the same doc, so keying on it makes an idle subscription cost ~0.
+  const cursorPath = cursor ? cursor.ref.path : null;
+  // Hold the live snapshot in a ref so the effect can still call startAfter with the
+  // REAL QueryDocumentSnapshot (mirroring constraintsRef) while depending only on the
+  // path string.
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
 
   const [state, setState] = useState<CollectionPageState<T>>({
     items: [],
@@ -84,12 +105,6 @@ export function useCollectionPage<T>(
     hasMore: false,
   });
 
-  // Depend on identity of the constraints array + primitive knobs.
-  const deps = useMemo(
-    () => [collectionPath, constraints, size, cursor, enabled] as const,
-    [collectionPath, constraints, size, cursor, enabled],
-  );
-
   useEffect(() => {
     if (!enabled) {
       setState((s) => ({ ...s, loading: false }));
@@ -98,7 +113,7 @@ export function useCollectionPage<T>(
     setState((s) => ({ ...s, loading: true, error: null }));
 
     const parts: QueryConstraint[] = [...constraintsRef.current];
-    if (cursor) parts.push(startAfter(cursor));
+    if (cursorRef.current) parts.push(startAfter(cursorRef.current));
     // Look one row past the page so `hasMore` is EXACT (never enable Next into an
     // empty page when the total is a multiple of the page size). The lookahead row
     // is trimmed below, so the cursor stays the last SHOWN doc (semantics preserved).
@@ -136,8 +151,13 @@ export function useCollectionPage<T>(
     // changes sort position can shift between adjacent pages (transient dup/gap).
     // This real-time + cursor design is what specs/05 §5.6 mandates; a screen that
     // needs strictly stable pagination should swap this for a one-shot getDocs.
+    //
+    // Re-subscribe only when the LOGICAL query changes: the path, the effective query
+    // (`queryKey` when supplied, else the constraints array identity), the page size,
+    // the cursor DOC PATH (not the re-minted snapshot object), or enabled. The live
+    // constraints/cursor snapshots are read from their refs inside the effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [collectionPath, queryKey ?? constraints, size, cursorPath, enabled]);
 
   return state;
 }
