@@ -15,12 +15,15 @@ API_URL="${API_URL:-$(api_url)}"
 TIME_ZONE="America/New_York"
 
 # name|schedule|body|endpoint   (body '-' => none; endpoint defaults to name)
-# rebuild-summaries runs incrementally every 15m AND a full recompute at 03:00 (specs/21 §21.2);
-# the full run is a second job hitting the same endpoint with {"mode":"full"}.
+# rebuild-summaries is a full recompute-from-source drift backstop (the nightly job hits the same
+# endpoint with {"mode":"full"}; the handler recomputes every key regardless of mode). DEMO COST
+# KNOB: a full sweep re-reads every read-model key from source (~43K reads on the seed) and the
+# event-driven projection path already keeps read models fresh, so the intra-day sweep runs every
+# 6h here — NOT */15, which cost ~4.1M reads/day on an always-on idle demo (specs/21 §21.2).
 JOBS=(
   "enqueue-due-contributions|0 9-17 * * 1-5|-|"
   "reconcile-stuck-payments|*/10 * * * *|-|"
-  "rebuild-summaries|*/15 * * * *|-|"
+  "rebuild-summaries|0 */6 * * *|-|"
   "rebuild-summaries-full|0 3 * * *|{\"mode\":\"full\"}|rebuild-summaries"
   "reap-expired-leases|*/5 * * * *|-|"
   "reset-demo|0 5 * * *|-|"
